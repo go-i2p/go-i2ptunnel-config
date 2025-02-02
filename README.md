@@ -1,1 +1,0 @@
-# go-i2ptunnel-config
