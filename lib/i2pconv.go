@@ -4,7 +4,20 @@ import (
 	"fmt"
 )
 
-// TunnelConfig represents a normalized tunnel configuration
+// TunnelConfig represents the configuration for an I2P tunnel.
+// It includes various settings such as the tunnel name, type, interface, port, and other options.
+//
+// Fields:
+// - Name: The name of the tunnel (string).
+// - Type: The type of the tunnel (string).
+// - Interface: The network interface to bind to (string, optional).
+// - Port: The port number to bind to (int, optional).
+// - PersistentKey: Indicates if the key should be persistent (bool, optional).
+// - Description: A description of the tunnel (string, optional).
+// - I2CP: A map of I2CP (I2P Control Protocol) options (map[string]interface{}, optional).
+// - Tunnel: A map of tunnel-specific options (map[string]interface{}, optional).
+// - Inbound: A map of inbound tunnel options (map[string]interface{}, optional).
+// - Outbound: A map of outbound tunnel options (map[string]interface{}, optional).
 type TunnelConfig struct {
 	Name          string                 `yaml:"name"`
 	Type          string                 `yaml:"type"`
@@ -18,7 +31,23 @@ type TunnelConfig struct {
 	Outbound      map[string]interface{} `yaml:"outbound,omitempty"`
 }
 
-// generateOutput generates the output based on the format
+// generateOutput generates the output for the given TunnelConfig in the specified format.
+//
+// Parameters:
+//   - config (*TunnelConfig): The tunnel configuration to be converted.
+//   - format (string): The desired output format. Supported formats are "properties", "yaml", and "ini".
+//
+// Returns:
+//   - ([]byte): The generated output in the specified format.
+//   - (error): An error if the specified format is unsupported or if there is an issue during generation.
+//
+// Errors:
+//   - Returns an error if the specified format is unsupported.
+//
+// Related:
+//   - generateJavaProperties
+//   - generateYAML
+//   - generateINI
 func (c *Converter) generateOutput(config *TunnelConfig, format string) ([]byte, error) {
 	switch format {
 	case "properties":
@@ -32,7 +61,6 @@ func (c *Converter) generateOutput(config *TunnelConfig, format string) ([]byte,
 	}
 }
 
-// validate checks the configuration for any errors
 func (c *Converter) validate(config *TunnelConfig) error {
 	if config.Name == "" {
 		return fmt.Errorf("name is required")
@@ -46,10 +74,8 @@ func (c *Converter) validate(config *TunnelConfig) error {
 // Converter handles configuration format conversions
 type Converter struct {
 	strict bool
-	// logger Logger
 }
 
-// Convert transforms between configuration formats
 func (c *Converter) Convert(input []byte, inFormat, outFormat string) ([]byte, error) {
 	config, err := c.parseInput(input, inFormat)
 	if err != nil {
@@ -63,7 +89,6 @@ func (c *Converter) Convert(input []byte, inFormat, outFormat string) ([]byte, e
 	return c.generateOutput(config, outFormat)
 }
 
-// parseInput parses the input based on the format
 func (c *Converter) parseInput(input []byte, format string) (*TunnelConfig, error) {
 	switch format {
 	case "properties":

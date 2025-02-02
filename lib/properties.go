@@ -65,6 +65,21 @@ func (c *Converter) parsePropertyKey(k, s string, config *TunnelConfig) {
 	}
 }
 
+// generateJavaProperties generates a Java properties file content based on the provided TunnelConfig.
+// It constructs the properties as a byte slice.
+//
+// Parameters:
+//   - config (*TunnelConfig): The configuration for the tunnel. It includes various fields such as Name, Type, Interface, Port, PersistentKey, Description, and maps for I2CP, Tunnel, Inbound, and Outbound options.
+//
+// Returns:
+//   - ([]byte): A byte slice containing the generated properties file content.
+//   - (error): An error if any occurs during the generation process.
+//
+// Notable Errors/Edge Cases:
+//   - The function does not handle any specific errors internally but returns any error encountered during the string building process.
+//
+// Related Code Entities:
+//   - TunnelConfig: The structure that holds the configuration for the tunnel.
 func (c *Converter) generateJavaProperties(config *TunnelConfig) ([]byte, error) {
 	var sb strings.Builder
 
