@@ -2,7 +2,6 @@ package i2pconv
 
 import "gopkg.in/yaml.v2"
 
-// Example YAML parser
 func (c *Converter) parseYAML(input []byte) (*TunnelConfig, error) {
 	config := &TunnelConfig{}
 	err := yaml.Unmarshal(input, config)

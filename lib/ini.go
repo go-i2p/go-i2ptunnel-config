@@ -23,7 +23,11 @@ func (c *Converter) parseINI(input []byte) (*TunnelConfig, error) {
 
 		parts := strings.SplitN(line, "=", 2)
 		if len(parts) != 2 {
-			continue
+			if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
+				config.Name = strings.TrimSuffix(strings.TrimPrefix(line, "["), "]")
+			} else {
+				continue
+			}
 		}
 
 		key := strings.TrimSpace(parts[0])

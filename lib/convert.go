@@ -39,7 +39,7 @@ func ConvertCommand(c *cli.Context) error {
 		fmt.Println(string(outputData))
 	} else {
 		outputFile := c.Args().Get(1)
-		if err := os.WriteFile(outputFile, outputData, 0644); err != nil {
+		if err := os.WriteFile(outputFile, outputData, 0o644); err != nil {
 			return fmt.Errorf("failed to write output file: %w", err)
 		}
 	}

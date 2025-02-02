@@ -8,7 +8,6 @@ import (
 	"github.com/magiconair/properties"
 )
 
-// Example Java properties parser
 func (c *Converter) parseJavaProperties(input []byte) (*TunnelConfig, error) {
 	p := properties.MustLoadString(string(input))
 
@@ -27,7 +26,7 @@ func (c *Converter) parseJavaProperties(input []byte) (*TunnelConfig, error) {
 	return config, nil
 }
 
-func (c *Converter) parsePropertyKey(k string, s string, config *TunnelConfig) {
+func (c *Converter) parsePropertyKey(k, s string, config *TunnelConfig) {
 	if strings.HasPrefix(k, "#") {
 		return
 	}

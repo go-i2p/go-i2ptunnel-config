@@ -46,7 +46,7 @@ func (c *Converter) validate(config *TunnelConfig) error {
 // Converter handles configuration format conversions
 type Converter struct {
 	strict bool
-	//logger Logger
+	// logger Logger
 }
 
 // Convert transforms between configuration formats
