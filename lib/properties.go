@@ -52,6 +52,8 @@ func (c *Converter) parsePropertyKey(k, s string, config *TunnelConfig) {
 		config.PersistentKey = true
 	case "description":
 		config.Description = s
+	case "targetDestination":
+		config.Target = s
 	default:
 		if strings.HasPrefix(parts[1], "option.i2cp") {
 			config.I2CP[parts[2]] = s

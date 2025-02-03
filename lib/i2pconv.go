@@ -12,6 +12,7 @@ import (
 // - Type: The type of the tunnel (string).
 // - Interface: The network interface to bind to (string, optional).
 // - Port: The port number to bind to (int, optional).
+// - Target: The target of the tunnel (string, optional).
 // - PersistentKey: Indicates if the key should be persistent (bool, optional).
 // - Description: A description of the tunnel (string, optional).
 // - I2CP: A map of I2CP (I2P Control Protocol) options (map[string]interface{}, optional).
@@ -23,6 +24,7 @@ type TunnelConfig struct {
 	Type          string                 `yaml:"type"`
 	Interface     string                 `yaml:"interface,omitempty"`
 	Port          int                    `yaml:"port,omitempty"`
+	Target        string                 `yaml:"target,omitempty"`
 	PersistentKey bool                   `yaml:"persistentKey,omitempty"`
 	Description   string                 `yaml:"description,omitempty"`
 	I2CP          map[string]interface{} `yaml:"i2cp,omitempty"`

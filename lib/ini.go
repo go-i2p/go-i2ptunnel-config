@@ -45,6 +45,8 @@ func (c *Converter) parseINI(input []byte) (*TunnelConfig, error) {
 			if err == nil {
 				config.Port = port
 			}
+		case "destination":
+			config.Target = value
 		default:
 			if strings.HasPrefix(key, "i2cp.") {
 				config.I2CP[strings.TrimPrefix(key, "i2cp.")] = value
