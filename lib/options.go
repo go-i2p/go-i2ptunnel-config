@@ -16,6 +16,9 @@ func (t *TunnelConfig) Options() map[string]string {
 	if t.Port != 0 {
 		options["Port"] = strconv.Itoa(t.Port)
 	}
+	if t.Target != "" {
+		options["Target"] = t.Target
+	}
 	if t.PersistentKey {
 		options["PersistentKey"] = "true"
 	}
