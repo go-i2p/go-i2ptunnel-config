@@ -97,7 +97,7 @@ func (c *Converter) generateJavaProperties(config *TunnelConfig) ([]byte, error)
 	if config.Port != 0 {
 		sb.WriteString(fmt.Sprintf("listenPort=%d\n", config.Port))
 	}
-	if config.Target != "{
+	if config.Target != "" {
 		sb.WriteString(fmt.Sprintf("targetDestination=%s\n", config.Target))
 	}
 	if config.PersistentKey {

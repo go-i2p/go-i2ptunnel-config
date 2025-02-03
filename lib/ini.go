@@ -78,8 +78,8 @@ func (c *Converter) generateINI(config *TunnelConfig) ([]byte, error) {
 	if config.Port != 0 {
 		sb.WriteString(fmt.Sprintf("port = %d\n", config.Port))
 	}
-	if config.Target != ""{
-       sb.WriteString(fmt.Sprintf("destination = %s\n", config.Target))
+	if config.Target != "" {
+		sb.WriteString(fmt.Sprintf("destination = %s\n", config.Target))
 	}
 
 	if config.PersistentKey {
