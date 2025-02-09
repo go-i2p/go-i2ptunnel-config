@@ -130,3 +130,15 @@ func (c *Converter) ParseInput(input []byte, format string) (*TunnelConfig, erro
 		return nil, fmt.Errorf("unsupported input format: %s", format)
 	}
 }
+
+func (c *Converter) DetectFormat(path string) (string, error) {
+	ext := strings.ToLower(filepath.Ext(path))
+	if ext == ".properties" || ext == ".prop" || ext == ".config" {
+		return "properties", nil
+	} else if ext == ".yml" || ext == ".yaml" {
+		return "yaml", nil
+	} else if ext == ".ini" {
+		return "ini", nil
+	}
+	return "", fmt.Errorf("unsupported file extension: %s", ext)
+}
