@@ -2,6 +2,9 @@ package i2pconv
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 )
 
 // TunnelConfig represents the configuration for an I2P tunnel.
@@ -31,6 +34,30 @@ type TunnelConfig struct {
 	Tunnel        map[string]interface{} `yaml:"options,omitempty"`
 	Inbound       map[string]interface{} `yaml:"inbound,omitempty"`
 	Outbound      map[string]interface{} `yaml:"outbound,omitempty"`
+}
+
+func (t *TunnelConfig) LoadConfig(path string) error {
+	conv := &Converter{}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("failed to read config file: %w", err)
+	}
+
+	format := strings.ToLower(filepath.Ext(path)[1:])
+	if format == "properties" || format == "prop" || format == "config" {
+		format = "properties"
+	} else if format == "yml" || format == "yaml" {
+		format = "yaml"
+	} else if format == "ini" {
+		format = "ini"
+	}
+
+	config, err := conv.parseInput(data, format)
+	if err != nil {
+		return fmt.Errorf("failed to parse config: %w", err)
+	}
+	*t = *config
+	return nil
 }
 
 // generateOutput generates the output for the given TunnelConfig in the specified format.
