@@ -52,7 +52,7 @@ func (t *TunnelConfig) LoadConfig(path string) error {
 		format = "ini"
 	}
 
-	config, err := conv.parseInput(data, format)
+	config, err := conv.ParseInput(data, format)
 	if err != nil {
 		return fmt.Errorf("failed to parse config: %w", err)
 	}
@@ -106,7 +106,7 @@ type Converter struct {
 }
 
 func (c *Converter) Convert(input []byte, inFormat, outFormat string) ([]byte, error) {
-	config, err := c.parseInput(input, inFormat)
+	config, err := c.ParseInput(input, inFormat)
 	if err != nil {
 		return nil, &ConversionError{Op: "parse", Err: err}
 	}
@@ -118,7 +118,7 @@ func (c *Converter) Convert(input []byte, inFormat, outFormat string) ([]byte, e
 	return c.generateOutput(config, outFormat)
 }
 
-func (c *Converter) parseInput(input []byte, format string) (*TunnelConfig, error) {
+func (c *Converter) ParseInput(input []byte, format string) (*TunnelConfig, error) {
 	switch format {
 	case "properties":
 		return c.parseJavaProperties(input)

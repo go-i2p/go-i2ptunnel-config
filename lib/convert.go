@@ -49,7 +49,7 @@ func ConvertCommand(c *cli.Context) error {
 		return fmt.Errorf("failed to read input file: %w", err)
 	}
 
-	config, err := converter.parseInput(inputData, inputFormat)
+	config, err := converter.ParseInput(inputData, inputFormat)
 	if err != nil {
 		return fmt.Errorf("failed to parse input: %w", err)
 	}
