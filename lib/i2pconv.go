@@ -137,7 +137,7 @@ func (c *Converter) DetectFormat(path string) (string, error) {
 		return "properties", nil
 	} else if ext == ".yml" || ext == ".yaml" {
 		return "yaml", nil
-	} else if ext == ".ini" {
+	} else if ext == ".ini" || ext == ".conf" {
 		return "ini", nil
 	}
 	return "", fmt.Errorf("unsupported file extension: %s", ext)

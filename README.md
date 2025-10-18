@@ -18,19 +18,24 @@ go install github.com/go-i2p/go-i2ptunnel-config@latest
 
 ## Usage
 
-Basic conversion:
+Basic conversion with auto-detection:
 ```bash
-go-i2ptunnel-config -in tunnel.config -out-format yaml
+go-i2ptunnel-config tunnel.config
+```
+
+Specify output format:
+```bash
+go-i2ptunnel-config --out-format ini tunnel.config
 ```
 
 Validate only:
 ```bash
-go-i2ptunnel-config -in tunnel.config -validate
+go-i2ptunnel-config --validate tunnel.config
 ```
 
-Test conversion:
+Test conversion (dry-run):
 ```bash
-go-i2ptunnel-config -in tunnel.config -output-format yaml -dry-run
+go-i2ptunnel-config --dry-run tunnel.config
 ```
 
 ## Contributing

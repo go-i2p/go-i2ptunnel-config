@@ -11,18 +11,42 @@ import (
 // CLI implementation
 func main() {
 	cmd := &cli.App{
-		Name:  "i2pconv",
-		Usage: "Convert I2P tunnel configurations between formats",
+		Name:    "go-i2ptunnel-config",
+		Usage:   "Convert I2P tunnel configurations between formats",
+		Version: "1.0.0",
+		Description: `A command line utility to convert I2P tunnel configurations between Java I2P, i2pd, and go-i2p formats.
+
+Supports automatic format detection based on file extensions:
+  - .config, .properties, .prop -> Java I2P properties format
+  - .conf, .ini -> i2pd INI format  
+  - .yaml, .yml -> go-i2p YAML format
+
+Examples:
+  # Auto-detect input format, output as YAML
+  go-i2ptunnel-config tunnel.config
+
+  # Specify output format
+  go-i2ptunnel-config -out-format ini tunnel.properties
+
+  # Dry run to validate without writing
+  go-i2ptunnel-config -dry-run tunnel.config
+
+  # Specify both input and output formats explicitly
+  go-i2ptunnel-config -in-format properties -out-format yaml tunnel.txt`,
+		ArgsUsage: "<input-file> [output-file]",
 		Flags: []cli.Flag{
-			&cli.StringSliceFlag{
-				Name:     "input-format, if",
-				Usage:    "Input format (properties|ini|yaml)",
-				Required: true,
+			&cli.StringFlag{
+				Name:  "in-format, if",
+				Usage: "Input format (properties|ini|yaml) - auto-detected if not specified",
 			},
-			&cli.StringSliceFlag{
-				Name:     "output-format, of",
-				Usage:    "Output format (properties|ini|yaml)",
-				Required: true,
+			&cli.StringFlag{
+				Name:  "out-format, of",
+				Usage: "Output format (properties|ini|yaml) - defaults to yaml",
+				Value: "yaml",
+			},
+			&cli.BoolFlag{
+				Name:  "validate",
+				Usage: "Validate input without conversion",
 			},
 			&cli.BoolFlag{
 				Name:  "strict",
@@ -30,7 +54,7 @@ func main() {
 			},
 			&cli.BoolFlag{
 				Name:  "dry-run",
-				Usage: "Validate without writing output",
+				Usage: "Print output to console instead of writing to file",
 			},
 		},
 		Action: i2pconv.ConvertCommand,
