@@ -27,16 +27,12 @@ func (c *Converter) parseJavaProperties(input []byte) (*TunnelConfig, error) {
 }
 
 func (c *Converter) parsePropertyKey(k, s string, config *TunnelConfig) {
-	if strings.HasPrefix(k, "#") {
-		return
+	if strings.HasPrefix(k, "#") || strings.HasPrefix(k, "configFile") {
+		return // Skip comments and config file path
 	}
-	kv := strings.Split(k, "=")
-	if len(kv) != 2 {
-		return
-	}
-	parts := strings.Split(kv[0], ".")
 
-	switch parts[1] {
+	// Handle flat keys
+	switch k {
 	case "name":
 		config.Name = s
 	case "type":
@@ -44,27 +40,58 @@ func (c *Converter) parsePropertyKey(k, s string, config *TunnelConfig) {
 	case "interface":
 		config.Interface = s
 	case "listenPort":
-		port, err := strconv.Atoi(s)
-		if err == nil {
+		if port, err := strconv.Atoi(s); err == nil {
 			config.Port = port
 		}
-	case "option.persistentClientKey":
-		config.PersistentKey = true
-	case "description":
-		config.Description = s
 	case "targetDestination":
 		config.Target = s
-	default:
-		if strings.HasPrefix(parts[1], "option.i2cp") {
-			config.I2CP[parts[2]] = s
-		} else if strings.HasPrefix(parts[1], "option.i2ptunnel") {
-			config.Tunnel[parts[2]] = s
-		} else if strings.HasPrefix(parts[1], "option.inbound") {
-			config.Inbound[parts[2]] = s
-		} else if strings.HasPrefix(parts[1], "option.outbound") {
-			config.Outbound[parts[2]] = s
+	case "targetHost":
+		config.Target = s // Alternative naming
+	case "description":
+		config.Description = s
+	case "i2cpHost":
+		if config.I2CP == nil {
+			config.I2CP = make(map[string]interface{})
+		}
+		config.I2CP["host"] = s
+	case "i2cpPort":
+		if config.I2CP == nil {
+			config.I2CP = make(map[string]interface{})
+		}
+		if port, err := strconv.Atoi(s); err == nil {
+			config.I2CP["port"] = port
 		}
 	}
+
+	// Handle prefixed keys
+	if strings.HasPrefix(k, "option.i2cp.") {
+		if config.I2CP == nil {
+			config.I2CP = make(map[string]interface{})
+		}
+		key := strings.TrimPrefix(k, "option.i2cp.")
+		config.I2CP[key] = parseValue(s)
+	}
+}
+
+// Helper to parse property values with type conversion
+func parseValue(s string) interface{} {
+	// Try boolean
+	if b, err := strconv.ParseBool(s); err == nil {
+		return b
+	}
+
+	// Try integer
+	if i, err := strconv.Atoi(s); err == nil {
+		return i
+	}
+
+	// Try comma-separated list
+	if strings.Contains(s, ",") {
+		return strings.Split(s, ",")
+	}
+
+	// Default to string
+	return s
 }
 
 // generateJavaProperties generates a Java properties file content based on the provided TunnelConfig.

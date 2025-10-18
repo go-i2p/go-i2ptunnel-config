@@ -23,3 +23,11 @@ go.work.sum
 
 # env file
 .env
+i2pconv
+err
+*.err*
+*.log*
+*.properties
+*.ini
+*.yaml
+*-test
