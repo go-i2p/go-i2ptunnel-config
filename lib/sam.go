@@ -10,15 +10,20 @@ import (
 )
 
 // SAMTunnel returns the I2P keys and SAM options for this tunnel configuration.
-// If PersistentKeys is true, keys will be stored in a SAMv3 compatible format.
+// If PersistentKey is true, keys will be loaded from or stored to a SAMv3 compatible file.
+// The keys file is named "{tunnel-name}.keys" in the current working directory.
 func (c *TunnelConfig) SAMTunnel() (*i2pkeys.I2PKeys, []string, error) {
 	var keys *i2pkeys.I2PKeys
 
 	if c.PersistentKey {
+		if c.Name == "" {
+			return nil, nil, fmt.Errorf("tunnel name is required for persistent keys")
+		}
+
 		// Get default I2P keystore path
 		keystore, err := os.Getwd()
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, fmt.Errorf("failed to get working directory: %w", err)
 		}
 
 		// Load or create keys for this tunnel
@@ -30,16 +35,19 @@ func (c *TunnelConfig) SAMTunnel() (*i2pkeys.I2PKeys, []string, error) {
 			// Create new keys if none exist
 			newKeys, err := i2pkeys.NewDestination()
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, fmt.Errorf("failed to generate new I2P keys: %w", err)
 			}
 			keys = newKeys
-			// Store the new
-			keyFile, err := os.Open(keypath)
+
+			// Store the new keys to file
+			keyFile, err := os.Create(keypath)
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, fmt.Errorf("failed to create key file %s: %w", keypath, err)
 			}
+			defer keyFile.Close()
+
 			if err := i2pkeys.StoreKeysIncompat(*newKeys, keyFile); err != nil {
-				return nil, nil, err
+				return nil, nil, fmt.Errorf("failed to store keys to file %s: %w", keypath, err)
 			}
 		}
 	}

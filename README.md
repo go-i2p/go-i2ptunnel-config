@@ -8,6 +8,7 @@ Command line utility to convert I2P tunnel configurations between Java I2P, i2pd
 - Format auto-detection
 - Validation checks
 - Dry-run mode
+- SAM (Simple Anonymous Messaging) integration with I2P key management
 - No network connectivity required
 
 ## Install
