@@ -27,9 +27,5 @@ i2pconv
 err
 *.err*
 *.log*
-*.properties
-*.ini
-*.conf
-*.yaml
 *-test
 go-i2ptunnel-config
