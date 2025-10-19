@@ -87,7 +87,7 @@ func ConvertCommand(c *cli.Context) error {
 	}
 
 	// Validate configuration
-	if err := converter.validate(config); err != nil {
+	if err := converter.validateWithFormat(config, inputFormat); err != nil {
 		return fmt.Errorf("validation error in '%s': %w", inputFile, err)
 	}
 

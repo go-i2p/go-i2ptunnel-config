@@ -91,13 +91,15 @@ func (c *Converter) generateOutput(config *TunnelConfig, format string) ([]byte,
 }
 
 func (c *Converter) validate(config *TunnelConfig) error {
-	if config.Name == "" {
-		return fmt.Errorf("name is required")
-	}
-	if config.Type == "" {
-		return fmt.Errorf("type is required")
-	}
-	return nil
+	// Use the comprehensive validation framework
+	validationCtx := NewValidationContext(c.strict, "")
+	return validationCtx.Validate(config)
+}
+
+func (c *Converter) validateWithFormat(config *TunnelConfig, format string) error {
+	// Use the comprehensive validation framework with format-specific rules
+	validationCtx := NewValidationContext(c.strict, format)
+	return validationCtx.Validate(config)
 }
 
 // Converter handles configuration format conversions
