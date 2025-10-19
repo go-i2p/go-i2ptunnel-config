@@ -23,6 +23,7 @@ import (
 // Flags:
 //   - in-format: Input format (properties|ini|yaml) - auto-detected if not specified
 //   - out-format: Output format (properties|ini|yaml) - defaults to yaml
+//   - output: Output file path - takes precedence over positional output-file argument
 //   - validate: Validate input without performing conversion
 //   - strict: Enable strict validation of the configuration
 //   - dry-run: Print output to console instead of writing to file
@@ -52,9 +53,15 @@ func ConvertCommand(c *cli.Context) error {
 	// Get flags with proper defaults
 	inputFormat := c.String("in-format")
 	outputFormat := c.String("out-format")
+	outputFlag := c.String("output")
 	validateOnly := c.Bool("validate")
 	strict := c.Bool("strict")
 	dryRun := c.Bool("dry-run")
+
+	// Handle output file priority: --output flag takes precedence over positional argument
+	if outputFlag != "" {
+		outputFile = outputFlag
+	}
 
 	// Initialize converter with options
 	converter := &Converter{strict: strict}

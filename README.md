@@ -29,6 +29,12 @@ Specify output format:
 go-i2ptunnel-config --out-format ini tunnel.config
 ```
 
+Specify custom output file:
+```bash
+go-i2ptunnel-config -o custom-name.yaml tunnel.config
+go-i2ptunnel-config --output /path/to/output.conf tunnel.properties
+```
+
 Validate only:
 ```bash
 go-i2ptunnel-config --validate tunnel.config

@@ -270,6 +270,199 @@ func TestFormatAutoDetection(t *testing.T) {
 	}
 }
 
+// TestConvertCommandOutputFile tests custom output file specification
+func TestConvertCommandOutputFile(t *testing.T) {
+	tempDir := t.TempDir()
+	inputFile := filepath.Join(tempDir, "test.properties")
+	testContent := `name=testTunnel
+type=httpclient
+interface=127.0.0.1
+listenPort=8080
+`
+
+	err := os.WriteFile(inputFile, []byte(testContent), 0644)
+	if err != nil {
+		t.Fatalf("failed to create test file: %v", err)
+	}
+
+	tests := []struct {
+		name           string
+		args           []string
+		expectedOutput string
+		description    string
+	}{
+		{
+			name:           "positional output file argument",
+			args:           []string{"go-i2ptunnel-config", inputFile, "custom-positional.yaml"},
+			expectedOutput: "custom-positional.yaml",
+			description:    "Should use positional argument for output file",
+		},
+		{
+			name:           "output flag short form",
+			args:           []string{"go-i2ptunnel-config", "-o", "custom-flag-short.yaml", inputFile},
+			expectedOutput: "custom-flag-short.yaml",
+			description:    "Should use -o flag for output file",
+		},
+		{
+			name:           "output flag long form",
+			args:           []string{"go-i2ptunnel-config", "--output", "custom-flag-long.yaml", inputFile},
+			expectedOutput: "custom-flag-long.yaml",
+			description:    "Should use --output flag for output file",
+		},
+		{
+			name:           "flag takes precedence over positional",
+			args:           []string{"go-i2ptunnel-config", "--output", "flag-wins.yaml", inputFile, "positional-loses.yaml"},
+			expectedOutput: "flag-wins.yaml",
+			description:    "Flag should take precedence over positional argument",
+		},
+		{
+			name:           "relative path output",
+			args:           []string{"go-i2ptunnel-config", "-o", "subdir/output.yaml", inputFile},
+			expectedOutput: "subdir/output.yaml",
+			description:    "Should handle relative paths in output",
+		},
+		{
+			name:           "different output format with custom name",
+			args:           []string{"go-i2ptunnel-config", "--out-format", "ini", "-o", "custom.conf", inputFile},
+			expectedOutput: "custom.conf",
+			description:    "Should use custom name even with different format",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create subdir if needed for relative path test
+			if strings.Contains(tt.expectedOutput, "/") {
+				dir := filepath.Dir(filepath.Join(tempDir, tt.expectedOutput))
+				os.MkdirAll(dir, 0755)
+			}
+
+			// Save current directory and change to temp directory
+			originalWd, _ := os.Getwd()
+			defer os.Chdir(originalWd)
+			os.Chdir(tempDir)
+
+			app := &cli.App{
+				Name: "go-i2ptunnel-config",
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:  "out-format",
+						Value: "yaml",
+					},
+					&cli.StringFlag{
+						Name: "output, o",
+					},
+				},
+				Action: ConvertCommand,
+			}
+
+			err := app.Run(tt.args)
+			if err != nil {
+				t.Errorf("%s: unexpected error: %v", tt.description, err)
+				return
+			}
+
+			// Verify the output file exists
+			expectedPath := filepath.Join(tempDir, tt.expectedOutput)
+			if _, err := os.Stat(expectedPath); os.IsNotExist(err) {
+				t.Errorf("%s: expected output file %q was not created", tt.description, tt.expectedOutput)
+			} else {
+				// Clean up
+				os.Remove(expectedPath)
+				// Clean up subdir if it was created
+				if strings.Contains(tt.expectedOutput, "/") {
+					dir := filepath.Dir(expectedPath)
+					os.Remove(dir) // Will only remove if empty
+				}
+			}
+		})
+	}
+}
+
+// TestConvertCommandOutputValidation tests output file validation scenarios
+func TestConvertCommandOutputValidation(t *testing.T) {
+	tempDir := t.TempDir()
+	inputFile := filepath.Join(tempDir, "test.properties")
+	testContent := `name=testTunnel
+type=httpclient
+interface=127.0.0.1
+listenPort=8080
+`
+
+	err := os.WriteFile(inputFile, []byte(testContent), 0644)
+	if err != nil {
+		t.Fatalf("failed to create test file: %v", err)
+	}
+
+	// Create a read-only directory to test permission errors
+	readOnlyDir := filepath.Join(tempDir, "readonly")
+	err = os.Mkdir(readOnlyDir, 0444)
+	if err != nil {
+		t.Fatalf("failed to create read-only directory: %v", err)
+	}
+	defer os.Chmod(readOnlyDir, 0755) // Ensure cleanup can happen
+
+	tests := []struct {
+		name        string
+		args        []string
+		expectError bool
+		errorMsg    string
+		description string
+	}{
+		{
+			name:        "invalid output directory",
+			args:        []string{"go-i2ptunnel-config", "-o", "/nonexistent/dir/output.yaml", inputFile},
+			expectError: true,
+			errorMsg:    "failed to write output file",
+			description: "Should fail when output directory doesn't exist",
+		},
+		{
+			name:        "read-only directory",
+			args:        []string{"go-i2ptunnel-config", "-o", filepath.Join(readOnlyDir, "output.yaml"), inputFile},
+			expectError: true,
+			errorMsg:    "failed to write output file",
+			description: "Should fail when output directory is read-only",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Save current directory and change to temp directory
+			originalWd, _ := os.Getwd()
+			defer os.Chdir(originalWd)
+			os.Chdir(tempDir)
+
+			app := &cli.App{
+				Name: "go-i2ptunnel-config",
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:  "out-format",
+						Value: "yaml",
+					},
+					&cli.StringFlag{
+						Name: "output, o",
+					},
+				},
+				Action: ConvertCommand,
+			}
+
+			err := app.Run(tt.args)
+
+			if tt.expectError {
+				if err == nil {
+					t.Errorf("%s: expected error but got none", tt.description)
+				} else if !strings.Contains(err.Error(), tt.errorMsg) {
+					t.Errorf("%s: expected error to contain %q, got: %q", tt.description, tt.errorMsg, err.Error())
+				}
+			} else {
+				if err != nil {
+					t.Errorf("%s: unexpected error: %v", tt.description, err)
+				}
+			}
+		})
+	}
+}
+
 // TestConvertCommandErrorHandling tests various error conditions
 func TestConvertCommandErrorHandling(t *testing.T) {
 	tempDir := t.TempDir()

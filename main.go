@@ -28,6 +28,10 @@ Examples:
   # Specify output format
   go-i2ptunnel-config -out-format ini tunnel.properties
 
+  # Specify custom output file
+  go-i2ptunnel-config -o /path/to/output.yaml tunnel.config
+  go-i2ptunnel-config tunnel.config custom-name.yaml
+
   # Dry run to validate without writing
   go-i2ptunnel-config -dry-run tunnel.config
 
@@ -43,6 +47,10 @@ Examples:
 				Name:  "out-format, of",
 				Usage: "Output format (properties|ini|yaml) - defaults to yaml",
 				Value: "yaml",
+			},
+			&cli.StringFlag{
+				Name:  "output, o",
+				Usage: "Output file path - auto-generated if not specified",
 			},
 			&cli.BoolFlag{
 				Name:  "validate",
