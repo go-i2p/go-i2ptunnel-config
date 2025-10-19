@@ -1,6 +1,7 @@
 package i2pconv
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -516,6 +517,285 @@ func TestConvertCommandErrorHandling(t *testing.T) {
 				t.Errorf("expected error but got none")
 			} else if !strings.Contains(err.Error(), tt.errorMsg) {
 				t.Errorf("expected error to contain %q, got: %q", tt.errorMsg, err.Error())
+			}
+		})
+	}
+}
+
+// TestProcessBatchWithGlob tests the glob pattern functionality using filepath.Glob directly
+func TestProcessBatchWithGlob(t *testing.T) {
+	// Create temporary directory for test files
+	tempDir := t.TempDir()
+
+	// Create test properties files
+	validProperties := `name=test-tunnel
+type=httpclient
+interface=127.0.0.1
+listenPort=8080
+`
+
+	// Write test files
+	testFiles := map[string]string{
+		"tunnel1.properties": validProperties,
+		"tunnel2.config":     validProperties,
+		"tunnel3.properties": validProperties,
+	}
+
+	for filename, content := range testFiles {
+		err := os.WriteFile(filepath.Join(tempDir, filename), []byte(content), 0644)
+		if err != nil {
+			t.Fatalf("failed to create test file %s: %v", filename, err)
+		}
+	}
+
+	tests := []struct {
+		name        string
+		pattern     string
+		expectFiles int
+		expectError bool
+		errorMsg    string
+	}{
+		{
+			name:        "valid glob pattern for properties",
+			pattern:     filepath.Join(tempDir, "*.properties"),
+			expectFiles: 2,
+			expectError: false,
+		},
+		{
+			name:        "valid glob pattern for config files",
+			pattern:     filepath.Join(tempDir, "*.config"),
+			expectFiles: 1,
+			expectError: false,
+		},
+		{
+			name:        "no matching files",
+			pattern:     filepath.Join(tempDir, "*.nonexistent"),
+			expectFiles: 0,
+			expectError: false,
+		},
+		{
+			name:        "all files",
+			pattern:     filepath.Join(tempDir, "*"),
+			expectFiles: 3,
+			expectError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			files, err := filepath.Glob(tt.pattern)
+
+			if tt.expectError {
+				if err == nil {
+					t.Errorf("expected error but got none")
+				} else if tt.errorMsg != "" && !strings.Contains(err.Error(), tt.errorMsg) {
+					t.Errorf("expected error to contain %q, got: %q", tt.errorMsg, err.Error())
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+				return
+			}
+
+			if len(files) != tt.expectFiles {
+				t.Errorf("expected %d files, got %d", tt.expectFiles, len(files))
+			}
+		})
+	}
+}
+
+// TestProcessSingleFile tests the extracted single file processing logic
+func TestProcessSingleFile(t *testing.T) {
+	// Create temporary directory for test files
+	tempDir := t.TempDir()
+
+	validProperties := `name=test-tunnel
+type=httpclient
+interface=127.0.0.1
+listenPort=8080
+`
+
+	invalidProperties := `name=
+type=invalid-type
+`
+
+	// Write test files
+	validFile := filepath.Join(tempDir, "valid.properties")
+	invalidFile := filepath.Join(tempDir, "invalid.properties")
+
+	err := os.WriteFile(validFile, []byte(validProperties), 0644)
+	if err != nil {
+		t.Fatalf("failed to create valid test file: %v", err)
+	}
+
+	err = os.WriteFile(invalidFile, []byte(invalidProperties), 0644)
+	if err != nil {
+		t.Fatalf("failed to create invalid test file: %v", err)
+	}
+
+	converter := &Converter{strict: false}
+
+	tests := []struct {
+		name         string
+		inputFile    string
+		outputFile   string
+		inputFormat  string
+		outputFormat string
+		validateOnly bool
+		dryRun       bool
+		expectError  bool
+		errorMsg     string
+	}{
+		{
+			name:         "valid file conversion",
+			inputFile:    validFile,
+			inputFormat:  "properties",
+			outputFormat: "yaml",
+			dryRun:       true,
+			expectError:  false,
+		},
+		{
+			name:         "valid file validation only",
+			inputFile:    validFile,
+			inputFormat:  "properties",
+			outputFormat: "yaml",
+			validateOnly: true,
+			expectError:  false,
+		},
+		{
+			name:         "invalid file validation",
+			inputFile:    invalidFile,
+			inputFormat:  "properties",
+			outputFormat: "yaml",
+			validateOnly: true,
+			expectError:  true,
+			errorMsg:     "validation error",
+		},
+		{
+			name:         "auto-detect format",
+			inputFile:    validFile,
+			inputFormat:  "", // Auto-detect
+			outputFormat: "yaml",
+			dryRun:       true,
+			expectError:  false,
+		},
+		{
+			name:        "nonexistent file",
+			inputFile:   filepath.Join(tempDir, "nonexistent.properties"),
+			inputFormat: "properties",
+			expectError: true,
+			errorMsg:    "failed to read input file",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := processSingleFile(tt.inputFile, tt.outputFile, tt.inputFormat,
+				tt.outputFormat, tt.validateOnly, tt.dryRun, converter)
+
+			if tt.expectError {
+				if err == nil {
+					t.Errorf("expected error but got none")
+				} else if tt.errorMsg != "" && !strings.Contains(err.Error(), tt.errorMsg) {
+					t.Errorf("expected error to contain %q, got: %q", tt.errorMsg, err.Error())
+				}
+			} else {
+				if err != nil {
+					t.Errorf("unexpected error: %v", err)
+				}
+			}
+		})
+	}
+}
+
+// TestReportBatchResults tests the batch results reporting functionality
+func TestReportBatchResults(t *testing.T) {
+	tests := []struct {
+		name         string
+		results      []BatchResult
+		validateOnly bool
+		dryRun       bool
+		expectError  bool
+	}{
+		{
+			name: "all successful conversions",
+			results: []BatchResult{
+				{
+					InputFile:    "file1.properties",
+					OutputFile:   "file1.yaml",
+					InputFormat:  "properties",
+					OutputFormat: "yaml",
+					Success:      true,
+				},
+				{
+					InputFile:    "file2.properties",
+					OutputFile:   "file2.yaml",
+					InputFormat:  "properties",
+					OutputFormat: "yaml",
+					Success:      true,
+				},
+			},
+			expectError: false,
+		},
+		{
+			name: "mixed success and failure",
+			results: []BatchResult{
+				{
+					InputFile:    "file1.properties",
+					OutputFile:   "file1.yaml",
+					InputFormat:  "properties",
+					OutputFormat: "yaml",
+					Success:      true,
+				},
+				{
+					InputFile: "file2.properties",
+					Success:   false,
+					Error:     fmt.Errorf("validation failed"),
+				},
+			},
+			expectError: true,
+		},
+		{
+			name: "validation only mode",
+			results: []BatchResult{
+				{
+					InputFile:   "file1.properties",
+					InputFormat: "properties",
+					Success:     true,
+				},
+			},
+			validateOnly: true,
+			expectError:  false,
+		},
+		{
+			name: "dry run mode",
+			results: []BatchResult{
+				{
+					InputFile:    "file1.properties",
+					InputFormat:  "properties",
+					OutputFormat: "yaml",
+					Success:      true,
+				},
+			},
+			dryRun:      true,
+			expectError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := reportBatchResults(tt.results, tt.validateOnly, tt.dryRun)
+
+			if tt.expectError {
+				if err == nil {
+					t.Errorf("expected error but got none")
+				}
+			} else {
+				if err != nil {
+					t.Errorf("unexpected error: %v", err)
+				}
 			}
 		})
 	}

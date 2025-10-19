@@ -45,6 +45,12 @@ Test conversion (dry-run):
 go-i2ptunnel-config --dry-run tunnel.config
 ```
 
+Batch process multiple files:
+```bash
+go-i2ptunnel-config --batch "*.config"
+go-i2ptunnel-config --batch --out-format ini "tunnels/*.properties"
+```
+
 ## Contributing
 
 1. Fork repository

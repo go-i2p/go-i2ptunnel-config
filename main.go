@@ -35,6 +35,10 @@ Examples:
   # Dry run to validate without writing
   go-i2ptunnel-config -dry-run tunnel.config
 
+  # Batch process multiple files using glob patterns
+  go-i2ptunnel-config -batch "*.config"
+  go-i2ptunnel-config -batch -out-format ini "tunnels/*.properties"
+
   # Specify both input and output formats explicitly
   go-i2ptunnel-config -in-format properties -out-format yaml tunnel.txt`,
 		ArgsUsage: "<input-file> [output-file]",
@@ -63,6 +67,10 @@ Examples:
 			&cli.BoolFlag{
 				Name:  "dry-run",
 				Usage: "Print output to console instead of writing to file",
+			},
+			&cli.BoolFlag{
+				Name:  "batch",
+				Usage: "Process multiple files using glob patterns",
 			},
 		},
 		Action: i2pconv.ConvertCommand,
