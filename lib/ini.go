@@ -95,7 +95,8 @@ func (c *Converter) parseINI(input []byte) (*TunnelConfig, error) {
 	lines := strings.Split(string(input), "\n")
 	currentSection := ""
 
-	for _, line := range lines {
+	for lineNum, line := range lines {
+		originalLine := line
 		line = strings.TrimSpace(line)
 
 		// Skip empty lines and comments
@@ -104,8 +105,16 @@ func (c *Converter) parseINI(input []byte) (*TunnelConfig, error) {
 		}
 
 		// Handle INI sections [section-name]
-		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
+		if strings.HasPrefix(line, "[") {
+			if !strings.HasSuffix(line, "]") {
+				return nil, newParseError(input, lineNum+1, 0, "ini",
+					"unclosed section bracket - expected ']'")
+			}
 			currentSection = strings.TrimSuffix(strings.TrimPrefix(line, "["), "]")
+			if currentSection == "" {
+				return nil, newParseError(input, lineNum+1, 0, "ini",
+					"empty section name - sections must have a name")
+			}
 			// For single tunnel config, use section name as tunnel name
 			if config.Name == "" {
 				config.Name = currentSection
@@ -116,11 +125,22 @@ func (c *Converter) parseINI(input []byte) (*TunnelConfig, error) {
 		// Parse key=value pairs
 		parts := strings.SplitN(line, "=", 2)
 		if len(parts) != 2 {
-			continue
+			// Check if line looks like it should be a key=value pair but is malformed
+			if strings.Contains(originalLine, "=") {
+				return nil, newParseError(input, lineNum+1, 0, "ini",
+					"malformed key=value pair - check for extra '=' characters")
+			}
+			return nil, newParseError(input, lineNum+1, 0, "ini",
+				"expected key=value pair or section header [name]")
 		}
 
 		key := strings.TrimSpace(parts[0])
 		value := strings.TrimSpace(parts[1])
+
+		if key == "" {
+			return nil, newParseError(input, lineNum+1, 0, "ini",
+				"empty key name - key=value pairs must have a key")
+		}
 
 		// Parse key-value pair with i2pd-specific handling
 		c.parseINIKeyValue(key, value, config)

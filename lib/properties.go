@@ -9,7 +9,13 @@ import (
 )
 
 func (c *Converter) parseJavaProperties(input []byte) (*TunnelConfig, error) {
-	p := properties.MustLoadString(string(input))
+	// Use LoadString which returns error instead of MustLoadString which panics
+	p, err := properties.LoadString(string(input))
+	if err != nil {
+		// Try to extract line number from error message
+		// properties library errors often include "line X" in the message
+		return nil, c.enhancePropertiesError(input, err)
+	}
 
 	config := &TunnelConfig{
 		I2CP:     make(map[string]interface{}),
@@ -24,6 +30,28 @@ func (c *Converter) parseJavaProperties(input []byte) (*TunnelConfig, error) {
 	}
 
 	return config, nil
+}
+
+// enhancePropertiesError wraps properties parsing errors with line context.
+// It attempts to extract line numbers from the error message and provide context.
+func (c *Converter) enhancePropertiesError(input []byte, err error) error {
+	// Try to extract line number from error message
+	// The properties library typically formats errors like "line 5: invalid syntax"
+	errMsg := err.Error()
+	var lineNum int
+	var matched bool
+
+	// Try to parse "line N" pattern from error
+	if _, scanErr := fmt.Sscanf(errMsg, "line %d", &lineNum); scanErr == nil {
+		matched = true
+	}
+
+	if matched && lineNum > 0 {
+		return newParseError(input, lineNum, 0, "properties", errMsg)
+	}
+
+	// If we can't extract line number, return original error
+	return fmt.Errorf("properties parse error: %w", err)
 }
 
 // parsePropertyKey parses a single Java I2P property key-value pair and updates the TunnelConfig.
