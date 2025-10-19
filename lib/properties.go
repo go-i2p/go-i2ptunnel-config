@@ -26,9 +26,39 @@ func (c *Converter) parseJavaProperties(input []byte) (*TunnelConfig, error) {
 	return config, nil
 }
 
+// parsePropertyKey parses a single Java I2P property key-value pair and updates the TunnelConfig.
+// Supports multiple Java I2P property patterns:
+//
+// Flat properties:
+//   - name, type, interface, listenPort, targetDestination, targetHost, description
+//   - proxyList, sharedClient, startOnLoad, accessList, targetPort, spoofedHost (stored in Tunnel map)
+//   - i2cpHost, i2cpPort (stored in I2CP map)
+//
+// Numbered tunnel patterns:
+//   - tunnel.N.property (e.g., tunnel.0.name, tunnel.1.type, tunnel.2.interface)
+//
+// Option prefixes:
+//   - option.i2cp.* -> stored in I2CP map
+//   - option.i2ptunnel.* -> stored in Tunnel map
+//   - option.inbound.* -> stored in Inbound map
+//   - option.outbound.* -> stored in Outbound map
+//   - option.persistentClientKey -> sets PersistentKey field
+//
+// Comments (#) and configFile properties are ignored.
 func (c *Converter) parsePropertyKey(k, s string, config *TunnelConfig) {
 	if strings.HasPrefix(k, "#") || strings.HasPrefix(k, "configFile") {
 		return // Skip comments and config file path
+	}
+
+	// Handle tunnel.N.property patterns for numbered tunnels
+	if strings.HasPrefix(k, "tunnel.") && strings.Contains(k, ".") {
+		parts := strings.SplitN(k, ".", 3)
+		if len(parts) == 3 {
+			// Format: tunnel.N.property (e.g., tunnel.0.name, tunnel.1.type)
+			property := parts[2]
+			c.parseNumberedTunnelProperty(property, s, config)
+			return
+		}
 	}
 
 	// Handle flat keys
@@ -47,8 +77,40 @@ func (c *Converter) parsePropertyKey(k, s string, config *TunnelConfig) {
 		config.Target = s
 	case "targetHost":
 		config.Target = s // Alternative naming
+	case "targetPort":
+		if port, err := strconv.Atoi(s); err == nil {
+			if config.Tunnel == nil {
+				config.Tunnel = make(map[string]interface{})
+			}
+			config.Tunnel["targetPort"] = port
+		}
 	case "description":
 		config.Description = s
+	case "proxyList":
+		if config.Tunnel == nil {
+			config.Tunnel = make(map[string]interface{})
+		}
+		config.Tunnel["proxyList"] = parseValue(s)
+	case "sharedClient":
+		if config.Tunnel == nil {
+			config.Tunnel = make(map[string]interface{})
+		}
+		config.Tunnel["sharedClient"] = parseValue(s)
+	case "startOnLoad":
+		if config.Tunnel == nil {
+			config.Tunnel = make(map[string]interface{})
+		}
+		config.Tunnel["startOnLoad"] = parseValue(s)
+	case "accessList":
+		if config.Tunnel == nil {
+			config.Tunnel = make(map[string]interface{})
+		}
+		config.Tunnel["accessList"] = parseValue(s)
+	case "spoofedHost":
+		if config.Tunnel == nil {
+			config.Tunnel = make(map[string]interface{})
+		}
+		config.Tunnel["spoofedHost"] = parseValue(s)
 	case "i2cpHost":
 		if config.I2CP == nil {
 			config.I2CP = make(map[string]interface{})
@@ -70,6 +132,84 @@ func (c *Converter) parsePropertyKey(k, s string, config *TunnelConfig) {
 		}
 		key := strings.TrimPrefix(k, "option.i2cp.")
 		config.I2CP[key] = parseValue(s)
+	} else if strings.HasPrefix(k, "option.i2ptunnel.") {
+		if config.Tunnel == nil {
+			config.Tunnel = make(map[string]interface{})
+		}
+		key := strings.TrimPrefix(k, "option.i2ptunnel.")
+		config.Tunnel[key] = parseValue(s)
+	} else if strings.HasPrefix(k, "option.inbound.") {
+		if config.Inbound == nil {
+			config.Inbound = make(map[string]interface{})
+		}
+		key := strings.TrimPrefix(k, "option.inbound.")
+		config.Inbound[key] = parseValue(s)
+	} else if strings.HasPrefix(k, "option.outbound.") {
+		if config.Outbound == nil {
+			config.Outbound = make(map[string]interface{})
+		}
+		key := strings.TrimPrefix(k, "option.outbound.")
+		config.Outbound[key] = parseValue(s)
+	} else if k == "option.persistentClientKey" {
+		config.PersistentKey = parseValue(s).(bool)
+	}
+}
+
+// parseNumberedTunnelProperty handles properties from tunnel.N.property patterns
+// For numbered tunnel configurations, we treat each as a separate tunnel instance
+// but for this converter we only support single tunnel configs, so we merge all numbered properties
+func (c *Converter) parseNumberedTunnelProperty(property, value string, config *TunnelConfig) {
+	switch property {
+	case "name":
+		// If config.Name is empty, use this as the primary name
+		// If config.Name exists, treat as additional tunnel option
+		if config.Name == "" {
+			config.Name = value
+		} else {
+			if config.Tunnel == nil {
+				config.Tunnel = make(map[string]interface{})
+			}
+			config.Tunnel["alternateName"] = value
+		}
+	case "type":
+		if config.Type == "" {
+			config.Type = value
+		}
+	case "interface":
+		if config.Interface == "" {
+			config.Interface = value
+		}
+	case "listenPort":
+		if config.Port == 0 {
+			if port, err := strconv.Atoi(value); err == nil {
+				config.Port = port
+			}
+		}
+	case "targetDestination":
+		if config.Target == "" {
+			config.Target = value
+		}
+	case "targetHost":
+		if config.Target == "" {
+			config.Target = value
+		}
+	case "targetPort":
+		if port, err := strconv.Atoi(value); err == nil {
+			if config.Tunnel == nil {
+				config.Tunnel = make(map[string]interface{})
+			}
+			config.Tunnel["targetPort"] = port
+		}
+	case "description":
+		if config.Description == "" {
+			config.Description = value
+		}
+	default:
+		// Store other numbered tunnel properties in the Tunnel map
+		if config.Tunnel == nil {
+			config.Tunnel = make(map[string]interface{})
+		}
+		config.Tunnel[property] = parseValue(value)
 	}
 }
 
@@ -135,20 +275,36 @@ func (c *Converter) generateJavaProperties(config *TunnelConfig) ([]byte, error)
 	}
 
 	for k, v := range config.I2CP {
-		sb.WriteString(fmt.Sprintf("option.i2cp.%s=%v\n", k, v))
+		sb.WriteString(fmt.Sprintf("option.i2cp.%s=%s\n", k, formatPropertyValue(v)))
 	}
 
 	for k, v := range config.Tunnel {
-		sb.WriteString(fmt.Sprintf("option.i2ptunnel.%s=%v\n", k, v))
+		// Handle special flat properties that should not have option.i2ptunnel prefix
+		switch k {
+		case "proxyList", "sharedClient", "startOnLoad", "accessList", "spoofedHost", "targetPort":
+			sb.WriteString(fmt.Sprintf("%s=%s\n", k, formatPropertyValue(v)))
+		default:
+			// Other tunnel options use the option.i2ptunnel prefix
+			sb.WriteString(fmt.Sprintf("option.i2ptunnel.%s=%s\n", k, formatPropertyValue(v)))
+		}
 	}
 
 	for k, v := range config.Inbound {
-		sb.WriteString(fmt.Sprintf("option.inbound.%s=%v\n", k, v))
+		sb.WriteString(fmt.Sprintf("option.inbound.%s=%s\n", k, formatPropertyValue(v)))
 	}
 
 	for k, v := range config.Outbound {
-		sb.WriteString(fmt.Sprintf("option.outbound.%s=%v\n", k, v))
+		sb.WriteString(fmt.Sprintf("option.outbound.%s=%s\n", k, formatPropertyValue(v)))
 	}
 
 	return []byte(sb.String()), nil
+}
+
+// formatPropertyValue formats a property value for output
+// Arrays/slices are formatted as comma-separated values
+func formatPropertyValue(v interface{}) string {
+	if slice, ok := v.([]string); ok {
+		return strings.Join(slice, ",")
+	}
+	return fmt.Sprint(v)
 }
