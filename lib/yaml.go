@@ -7,13 +7,33 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
+// parseYAML parses YAML using the standard nested structure with "tunnels" map.
+// This is the go-i2p format where tunnels are defined in a "tunnels" map.
+// The parser extracts the first tunnel for single-tunnel conversion workflows.
+// The tunnel name is set from the map key.
 func (c *Converter) parseYAML(input []byte) (*TunnelConfig, error) {
-	config := &TunnelConfig{}
-	err := yaml.Unmarshal(input, config)
+	type wrapper struct {
+		Tunnels map[string]*TunnelConfig `yaml:"tunnels"`
+	}
+
+	var w wrapper
+	err := yaml.Unmarshal(input, &w)
 	if err != nil {
 		return nil, c.enhanceYAMLError(input, err)
 	}
-	return config, nil
+
+	// Extract the first tunnel (for single-tunnel conversion)
+	if len(w.Tunnels) == 0 {
+		return nil, fmt.Errorf("yaml: no tunnels found in tunnels map")
+	}
+
+	// Return the first tunnel with its name set from the map key
+	for name, config := range w.Tunnels {
+		config.Name = name
+		return config, nil
+	}
+
+	return nil, fmt.Errorf("yaml: failed to extract tunnel from nested structure")
 }
 
 // enhanceYAMLError wraps YAML parsing errors with line context.
@@ -60,6 +80,9 @@ func (c *Converter) enhanceYAMLError(input []byte, err error) error {
 	return fmt.Errorf("yaml parse error: %w", err)
 }
 
+// generateYAML creates YAML output in the standard nested structure format.
+// This is the go-i2p format where tunnels are defined in a "tunnels" map.
+// The tunnel is keyed by its name in the map, allowing for future multi-tunnel support.
 func (c *Converter) generateYAML(config *TunnelConfig) ([]byte, error) {
 	type wrapper struct {
 		Tunnels map[string]*TunnelConfig `yaml:"tunnels"`

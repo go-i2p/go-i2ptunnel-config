@@ -145,7 +145,7 @@ func TestCrossFormatConversion(t *testing.T) {
 	})
 }
 
-// TestYAMLParser tests the parseYAML function specifically (0% coverage)
+// TestYAMLParser tests the parseYAML function with the nested tunnels format
 func TestYAMLParser(t *testing.T) {
 	converter := &Converter{}
 
@@ -156,26 +156,27 @@ func TestYAMLParser(t *testing.T) {
 		wantErr  bool
 	}{
 		{
-			name: "valid_yaml_direct_format",
-			input: `name: HttpProxy
-type: httpclient
-interface: 127.0.0.1
-port: 4444
-target: example.i2p
-description: HTTP proxy tunnel
-persistentKey: true
-i2cp:
-  leaseSetEncType:
-    - "4"
-    - "0"
-  reduceIdleTime: 900000
-options:
-  proxyList: "proxy1.i2p,proxy2.i2p"
-  sharedClient: true
-inbound:
-  length: 3
-outbound:
-  length: 2`,
+			name: "valid_yaml_nested_format",
+			input: `tunnels:
+  HttpProxy:
+    type: httpclient
+    interface: 127.0.0.1
+    port: 4444
+    target: example.i2p
+    description: HTTP proxy tunnel
+    persistentKey: true
+    i2cp:
+      leaseSetEncType:
+        - "4"
+        - "0"
+      reduceIdleTime: 900000
+    options:
+      proxyList: "proxy1.i2p,proxy2.i2p"
+      sharedClient: true
+    inbound:
+      length: 3
+    outbound:
+      length: 2`,
 			expected: &TunnelConfig{
 				Name:          "HttpProxy",
 				Type:          "httpclient",
@@ -203,8 +204,9 @@ outbound:
 		},
 		{
 			name: "minimal_yaml_tunnel",
-			input: `name: MinimalTunnel
-type: client`,
+			input: `tunnels:
+  MinimalTunnel:
+    type: client`,
 			expected: &TunnelConfig{
 				Name: "MinimalTunnel",
 				Type: "client",
@@ -213,19 +215,20 @@ type: client`,
 		},
 		{
 			name: "invalid_yaml_syntax",
-			input: `name: BadTunnel
-type: httpclient
-port: "not_a_number"
-invalid_yaml: [
-  - missing closing bracket`,
+			input: `tunnels:
+  BadTunnel:
+    type: httpclient
+    port: "not_a_number"
+    invalid_yaml: [
+      - missing closing bracket`,
 			expected: nil,
 			wantErr:  true,
 		},
 		{
-			name:     "empty_yaml",
-			input:    "",
-			expected: &TunnelConfig{},
-			wantErr:  false,
+			name:     "empty_tunnels_map",
+			input:    "tunnels: {}",
+			expected: nil,
+			wantErr:  true,
 		},
 	}
 
@@ -420,11 +423,12 @@ description=Load test tunnel`
 			t.Errorf("LoadConfig() Port = %d, want %d", config.Port, 8080)
 		}
 
-		// Test loading YAML file (direct format, not wrapped)
+		// Test loading YAML file (nested format with tunnels map)
 		yamlFile := filepath.Join(tempDir, "test.yaml")
-		yamlContent := `name: YamlTest
-type: server
-port: 9090`
+		yamlContent := `tunnels:
+  YamlTest:
+    type: server
+    port: 9090`
 		err = os.WriteFile(yamlFile, []byte(yamlContent), 0644)
 		if err != nil {
 			t.Fatalf("Failed to create test YAML file: %v", err)

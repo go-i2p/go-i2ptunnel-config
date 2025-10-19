@@ -51,6 +51,18 @@ go-i2ptunnel-config --batch "*.config"
 go-i2ptunnel-config --batch --out-format ini "tunnels/*.properties"
 ```
 
+## Examples
+
+The `examples/` directory contains ready-to-use configuration templates for common tunnel types in all three formats:
+
+- HTTP client (web proxy)
+- HTTP server (eepsite hosting)
+- SOCKS proxy
+- Generic client tunnel
+- Generic server tunnel
+
+Each example includes detailed comments explaining the configuration options. See [examples/README.md](examples/README.md) for more information.
+
 ## Contributing
 
 1. Fork repository

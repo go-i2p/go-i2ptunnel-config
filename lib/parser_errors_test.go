@@ -173,7 +173,7 @@ type client`,
 	}
 }
 
-// TestYAMLParserErrors tests enhanced error reporting for YAML format
+// TestYAMLParserErrors tests enhanced error reporting for YAML format (nested structure)
 func TestYAMLParserErrors(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -184,32 +184,37 @@ func TestYAMLParserErrors(t *testing.T) {
 	}{
 		{
 			name: "valid yaml",
-			input: `name: test-tunnel
-type: client
-interface: 127.0.0.1
-port: 4444`,
+			input: `tunnels:
+  test-tunnel:
+    type: client
+    interface: 127.0.0.1
+    port: 4444`,
 			expectError: false,
 		},
 		{
 			name: "invalid indentation",
-			input: `name: test
-  type: client
-interface: 127.0.0.1`,
+			input: `tunnels:
+  test:
+      type: client
+  interface: 127.0.0.1`,
 			expectError:    true,
 			expectParseErr: true,
 		},
 		{
 			name: "invalid yaml structure",
-			input: `name: test
-type client`,
+			input: `tunnels:
+  test
+    type: client`,
 			expectError:    true,
 			expectParseErr: true,
-			expectLineNum:  3, // YAML error reports line 3 (end of file)
+			expectLineNum:  3, // YAML error reports line 3
 		},
 		{
 			name: "unclosed quote",
-			input: `name: "test
-type: client`,
+			input: `tunnels:
+  test:
+    name: "test
+    type: client`,
 			expectError:    true,
 			expectParseErr: true,
 		},

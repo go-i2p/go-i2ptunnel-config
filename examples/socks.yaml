@@ -1,0 +1,30 @@
+# SOCKS Tunnel Configuration (YAML format - go-i2p)
+# This creates a SOCKS proxy that provides access to I2P network services
+
+tunnels:
+  MySOCKSProxy:
+    type: sockstunnel
+    description: SOCKS5 proxy for I2P network access
+    interface: 127.0.0.1
+    port: 9050
+    persistentKey: true
+
+    # I2CP options
+    i2cp:
+      leaseSetEncType: "4,0"
+      closeIdleTime: 1800000
+
+    # Tunnel configuration options
+    options:
+      gzip: true
+
+    # Inbound tunnel settings
+    inbound:
+      length: 3
+      quantity: 2
+
+    # Outbound tunnel settings
+    outbound:
+      length: 3
+      quantity: 2
+      randomKey: true

@@ -1,0 +1,30 @@
+# Generic Client Tunnel Configuration (YAML format - go-i2p)
+# This creates a standard TCP client tunnel for any protocol
+
+tunnels:
+  MyClientTunnel:
+    type: client
+    description: Generic client tunnel for custom protocols
+    interface: 127.0.0.1
+    port: 7000
+    target: example.i2p
+    persistentKey: true
+
+    # I2CP options
+    i2cp:
+      leaseSetEncType: "4,0"
+      closeIdleTime: 1800000
+
+    # Tunnel configuration options
+    options:
+      gzip: false
+
+    # Inbound tunnel settings
+    inbound:
+      length: 3
+      quantity: 2
+
+    # Outbound tunnel settings
+    outbound:
+      length: 3
+      quantity: 2

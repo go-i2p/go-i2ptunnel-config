@@ -1,0 +1,28 @@
+# Generic Server Tunnel Configuration (YAML format - go-i2p)
+# This publishes a local TCP service as an I2P hidden service
+
+tunnels:
+  MyServerTunnel:
+    type: server
+    description: Generic server tunnel for custom protocols
+    target: 127.0.0.1:9000
+    persistentKey: true
+
+    # I2CP options
+    i2cp:
+      leaseSetEncType: "4,0"
+      closeIdleTime: 1800000
+
+    # Tunnel configuration options
+    options:
+      gzip: false
+
+    # Inbound tunnel settings
+    inbound:
+      length: 3
+      quantity: 3
+
+    # Outbound tunnel settings
+    outbound:
+      length: 3
+      quantity: 3

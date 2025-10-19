@@ -13,7 +13,7 @@ func main() {
 	cmd := &cli.App{
 		Name:    "go-i2ptunnel-config",
 		Usage:   "Convert I2P tunnel configurations between formats",
-		Version: "1.0.0",
+		Version: "0.33.0",
 		Description: `A command line utility to convert I2P tunnel configurations between Java I2P, i2pd, and go-i2p formats.
 
 Supports automatic format detection based on file extensions:

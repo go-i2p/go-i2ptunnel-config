@@ -331,8 +331,19 @@ func (c *Converter) generateJavaProperties(config *TunnelConfig) ([]byte, error)
 // formatPropertyValue formats a property value for output
 // Arrays/slices are formatted as comma-separated values
 func formatPropertyValue(v interface{}) string {
+	// Handle []string
 	if slice, ok := v.([]string); ok {
 		return strings.Join(slice, ",")
 	}
+
+	// Handle []interface{} (common from YAML unmarshaling)
+	if slice, ok := v.([]interface{}); ok {
+		strSlice := make([]string, len(slice))
+		for i, item := range slice {
+			strSlice[i] = fmt.Sprint(item)
+		}
+		return strings.Join(strSlice, ",")
+	}
+
 	return fmt.Sprint(v)
 }

@@ -1,0 +1,30 @@
+# HTTP Server Tunnel Configuration (YAML format - go-i2p)
+# This publishes a local web server as an I2P hidden service (eepsite)
+
+tunnels:
+  MyWebsite:
+    type: httpserver
+    description: My personal eepsite
+    target: 127.0.0.1:8080
+    persistentKey: true
+
+    # I2CP options - control destination management
+    i2cp:
+      leaseSetEncType: "4,0"
+      closeIdleTime: 1800000
+      newDestOnResume: false
+
+    # Tunnel configuration options
+    options:
+      gzip: true
+      spoofedHost: mysite.i2p
+
+    # Inbound tunnel settings
+    inbound:
+      length: 3
+      quantity: 3
+
+    # Outbound tunnel settings
+    outbound:
+      length: 3
+      quantity: 3

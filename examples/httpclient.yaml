@@ -1,0 +1,31 @@
+# HTTP Client Tunnel Configuration (YAML format - go-i2p)
+# This creates an HTTP proxy that allows you to access I2P sites (eepsites)
+
+tunnels:
+  MyHTTPProxy:
+    type: httpclient
+    description: HTTP proxy for accessing eepsites
+    interface: 127.0.0.1
+    port: 4444
+    persistentKey: true
+
+    # I2CP options - control how the tunnel connects to the I2P router
+    i2cp:
+      leaseSetEncType: "4,0"
+      closeIdleTime: 1800000
+      newDestOnResume: false
+
+    # Tunnel configuration options
+    options:
+      gzip: true
+
+    # Inbound tunnel settings
+    inbound:
+      length: 3
+      quantity: 2
+
+    # Outbound tunnel settings
+    outbound:
+      length: 3
+      quantity: 2
+      randomKey: true
