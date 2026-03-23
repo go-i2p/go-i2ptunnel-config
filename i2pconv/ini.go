@@ -223,7 +223,7 @@ func parseCoreINIField(key, value string, config *TunnelConfig) bool {
 			config.Name = value
 		}
 	case "type":
-		config.Type = value
+		config.Type = NormalizeTypeName(value)
 	case "host", "interface":
 		config.Interface = value
 	case "port":

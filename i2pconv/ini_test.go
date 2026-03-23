@@ -2,6 +2,7 @@ package i2pconv
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -595,4 +596,50 @@ func TestINIKeyValueCoverage(t *testing.T) {
 			t.Errorf("expected Tunnel[hostoverride]='override.example.com', got %v", got)
 		}
 	})
+}
+
+// TestNormalizeTypeName verifies that i2pd short-form type aliases are mapped to
+// their canonical Java-I2P counterparts and that unknown / already-canonical
+// names pass through unchanged (lowercased).
+func TestNormalizeTypeName(t *testing.T) {
+	cases := []struct {
+		input string
+		want  string
+	}{
+		{"http", "httpclient"},
+		{"socks", "sockstunnel"},
+		{"udptunnel", "client"},
+		{"httpclient", "httpclient"}, // already canonical
+		{"server", "server"},         // unknown alias — pass through
+		{"HTTP", "httpclient"},       // case-insensitive
+		{"SOCKS", "sockstunnel"},     // case-insensitive
+	}
+	for _, tc := range cases {
+		got := NormalizeTypeName(tc.input)
+		if got != tc.want {
+			t.Errorf("NormalizeTypeName(%q) = %q, want %q", tc.input, got, tc.want)
+		}
+	}
+}
+
+// TestINITypeNormalizationRoundTrip parses an i2pd-style conf that uses the
+// short alias "http" and confirms the parsed TunnelConfig holds the canonical
+// name "httpclient", and that converting to .properties format preserves it.
+func TestINITypeNormalizationRoundTrip(t *testing.T) {
+	conv := &Converter{}
+	ini := "[MyProxy]\ntype = http\nport = 4444\nkeys = transient\n"
+	config, err := conv.ParseInput([]byte(ini), "ini")
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if config.Type != "httpclient" {
+		t.Errorf("Type after INI parse: got %q, want \"httpclient\"", config.Type)
+	}
+	props, err := conv.generateOutput(config, "properties")
+	if err != nil {
+		t.Fatalf("generate properties: %v", err)
+	}
+	if !strings.Contains(string(props), "type=httpclient") {
+		t.Errorf("properties output missing type=httpclient:\n%s", props)
+	}
 }

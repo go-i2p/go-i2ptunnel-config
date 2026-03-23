@@ -187,6 +187,22 @@ func (v *ValidationContext) initializeTunnelSpecs() {
 			{Field: "interface", Required: false, Validator: v.validateInterface, Description: "Interface must be valid if specified"},
 		},
 	}
+
+	// i2pd alias types - map to the same specs as their canonical counterparts.
+	// i2pd uses "http" for httpclient and "socks" for sockstunnel.
+	// NormalizeTypeName handles these at parse time, but specs are also
+	// registered here so that configs parsed with alias names still validate.
+	httpAlias := v.TunnelSpecs[TunnelTypeHTTPClient]
+	httpAlias.Name = "http"
+	v.TunnelSpecs["http"] = httpAlias
+
+	socksAlias := v.TunnelSpecs[TunnelTypeSOCKS]
+	socksAlias.Name = "socks"
+	v.TunnelSpecs["socks"] = socksAlias
+
+	udpAlias := v.TunnelSpecs[TunnelTypeClient]
+	udpAlias.Name = "udptunnel"
+	v.TunnelSpecs["udptunnel"] = udpAlias
 }
 
 // Validate validates a tunnel configuration according to its type and format
