@@ -222,13 +222,21 @@ func (c *Converter) parseINI(input []byte) (*TunnelConfig, error) {
 		c.parseINIKeyValue(key, value, config)
 	}
 
-	// Second-pass: for client tunnels, i2pd's "address" field is the local
-	// bind address (analogous to host/interface), not the remote destination.
-	// If we stored it as Target but the type is a known client type and the
-	// value looks like a bare host/IP rather than an I2P destination, move it.
-	if isClientTunnelType(config.Type) && config.Interface == "" && config.Target != "" && !looksLikeI2PDestination(config.Target) {
-		config.Interface = config.Target
-		config.Target = ""
+	// Second-pass: resolve the staged "address" key to the correct field.
+	// For client tunnels, "address" is the local bind address (→ Interface).
+	// For server tunnels, "address" is the backend/remote address (→ Target).
+	if rawAddr, ok := config.Tunnel["_rawAddress"]; ok {
+		addr := rawAddr.(string)
+		delete(config.Tunnel, "_rawAddress")
+		if isClientTunnelType(config.Type) && !looksLikeI2PDestination(addr) {
+			if config.Interface == "" {
+				config.Interface = addr
+			}
+		} else {
+			if config.Target == "" {
+				config.Target = addr
+			}
+		}
 	}
 
 	return config, nil
@@ -266,8 +274,13 @@ func parseCoreINIField(key, value string, config *TunnelConfig) bool {
 		}
 	case "destination":
 		config.Target = value
-	case "address": // i2pd server tunnel address
-		config.Target = value
+	case "address":
+		// Stage the value; parseINI second-pass resolves it to Interface (client
+		// tunnels) or Target (server tunnels) once the type is known.
+		if config.Tunnel == nil {
+			config.Tunnel = make(map[string]interface{})
+		}
+		config.Tunnel["_rawAddress"] = value
 	case "hostoverride": // i2pd client tunnel host override
 		if config.Tunnel == nil {
 			config.Tunnel = make(map[string]interface{})

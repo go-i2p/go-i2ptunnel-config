@@ -598,6 +598,100 @@ func TestINIKeyValueCoverage(t *testing.T) {
 	})
 }
 
+// TestINIClientAddressBecomesInterface verifies that for client tunnel types,
+// the i2pd "address" key (local bind address) is mapped to config.Interface
+// rather than config.Target.
+func TestINIClientAddressBecomesInterface(t *testing.T) {
+	tests := []struct {
+		name          string
+		input         string
+		wantInterface string
+		wantTarget    string
+	}{
+		{
+			name: "http alias client address",
+			input: `[MyHTTPProxy]
+type = http
+address = 127.0.0.1
+port = 4444
+keys = httpclient-keys.dat
+`,
+			wantInterface: "127.0.0.1",
+			wantTarget:    "",
+		},
+		{
+			name: "httpclient canonical client address",
+			input: `[HttpClient]
+type = httpclient
+address = 0.0.0.0
+port = 4444
+`,
+			wantInterface: "0.0.0.0",
+			wantTarget:    "",
+		},
+		{
+			name: "ircclient address",
+			input: `[IRCProxy]
+type = ircclient
+address = 127.0.0.1
+port = 6668
+destination = irc.example.i2p
+`,
+			wantInterface: "127.0.0.1",
+			wantTarget:    "irc.example.i2p",
+		},
+		{
+			name: "server tunnel address stays as Target",
+			input: `[WebServer]
+type = httpserver
+address = webserver.i2p
+port = 80
+host = 127.0.0.1
+`,
+			wantInterface: "127.0.0.1",
+			wantTarget:    "webserver.i2p",
+		},
+	}
+
+	conv := &Converter{}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config, err := conv.ParseInput([]byte(tt.input), "ini")
+			if err != nil {
+				t.Fatalf("ParseInput: %v", err)
+			}
+			if config.Interface != tt.wantInterface {
+				t.Errorf("Interface: want %q, got %q", tt.wantInterface, config.Interface)
+			}
+			if config.Target != tt.wantTarget {
+				t.Errorf("Target: want %q, got %q", tt.wantTarget, config.Target)
+			}
+		})
+	}
+}
+
+// TestLooksLikeI2PDestination exercises the helper directly.
+func TestLooksLikeI2PDestination(t *testing.T) {
+	cases := []struct {
+		input string
+		want  bool
+	}{
+		{"example.i2p", true},
+		{"something.b32.i2p", true},
+		{"127.0.0.1", false},
+		{"0.0.0.0", false},
+		{"localhost", false},
+		{strings.Repeat("A", 516), true},
+		{strings.Repeat("A", 515), false},
+	}
+	for _, c := range cases {
+		got := looksLikeI2PDestination(c.input)
+		if got != c.want {
+			t.Errorf("looksLikeI2PDestination(%q) = %v, want %v", c.input, got, c.want)
+		}
+	}
+}
+
 // TestNormalizeTypeName verifies that i2pd short-form type aliases are mapped to
 // their canonical Java-I2P counterparts and that unknown / already-canonical
 // names pass through unchanged (lowercased).

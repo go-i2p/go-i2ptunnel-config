@@ -1,20 +1,23 @@
 tunnels:
   MyHTTPProxy:
     name: MyHTTPProxy
-    type: http
+    type: httpclient
+    interface: 127.0.0.1
     port: 4444
-    target: 127.0.0.1
     persistentKey: true
+    description: HTTP proxy for accessing eepsites
     i2cp:
+      closeIdleTime: 1800000
       leaseSetEncType:
       - "4"
       - "0"
+      newDestOnResume: false
     options:
-      gzip: true
-      keyfile: httpclient-keys.dat
+      httpclient.allowInternalSSL: false
     inbound:
       length: 3
       quantity: 2
     outbound:
       length: 3
       quantity: 2
+      randomKey: true
