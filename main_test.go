@@ -159,3 +159,160 @@ func TestMain_DryRunStdout(t *testing.T) {
 		t.Errorf("dry-run must not write %s", expected)
 	}
 }
+
+// TestMain_StdinDryRun checks that --in-format yaml --dry-run - reads from stdin
+// and prints converted output without writing any file.
+func TestMain_StdinDryRun(t *testing.T) {
+	yamlContent := "tunnels:\n  stdinTunnel:\n    name: stdinTunnel\n    type: httpclient\n    port: 4444\n"
+
+	// Replace stdin with a pipe pre-loaded with YAML content.
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe: %v", err)
+	}
+	if _, err := w.WriteString(yamlContent); err != nil {
+		t.Fatalf("write to pipe: %v", err)
+	}
+	w.Close()
+
+	origStdin := os.Stdin
+	os.Stdin = r
+	defer func() {
+		os.Stdin = origStdin
+		r.Close()
+	}()
+
+	// Capture stdout.
+	origStdout := os.Stdout
+	ro, rw, _ := os.Pipe()
+	os.Stdout = rw
+
+	app := newApp()
+	runErr := app.Run([]string{
+		"go-i2ptunnel-config",
+		"--in-format", "yaml",
+		"--dry-run",
+		"-",
+	})
+
+	rw.Close()
+	os.Stdout = origStdout
+	var buf strings.Builder
+	tmp := make([]byte, 4096)
+	for {
+		n, readErr := ro.Read(tmp)
+		buf.Write(tmp[:n])
+		if readErr != nil {
+			break
+		}
+	}
+	ro.Close()
+
+	if runErr != nil {
+		t.Fatalf("unexpected error: %v", runErr)
+	}
+	if !strings.Contains(buf.String(), "stdinTunnel") {
+		t.Errorf("stdin dry-run output did not contain 'stdinTunnel'; got:\n%s", buf.String())
+	}
+}
+
+// TestMain_SplitDryRun checks that --split --dry-run on a 3-section INI file
+// prints output for all three tunnels without writing any files.
+func TestMain_SplitDryRun(t *testing.T) {
+	dir := t.TempDir()
+	iniContent := "[tunnel-a]\ntype = client\nport = 1111\n\n[tunnel-b]\ntype = client\nport = 2222\n\n[tunnel-c]\ntype = client\nport = 3333\n"
+	src := filepath.Join(dir, "multi.conf")
+	if err := os.WriteFile(src, []byte(iniContent), 0o644); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+
+	// Capture stdout.
+	origStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	app := newApp()
+	runErr := app.Run([]string{
+		"go-i2ptunnel-config",
+		"--split",
+		"--dry-run",
+		src,
+	})
+
+	w.Close()
+	os.Stdout = origStdout
+	var buf strings.Builder
+	tmp := make([]byte, 4096)
+	for {
+		n, err := r.Read(tmp)
+		buf.Write(tmp[:n])
+		if err != nil {
+			break
+		}
+	}
+	r.Close()
+
+	if runErr != nil {
+		t.Fatalf("unexpected error: %v", runErr)
+	}
+	output := buf.String()
+	for _, name := range []string{"tunnel-a", "tunnel-b", "tunnel-c"} {
+		if !strings.Contains(output, name) {
+			t.Errorf("split dry-run output missing tunnel '%s'; got:\n%s", name, output)
+		}
+	}
+}
+
+// TestMain_ListTunnels checks that --list-tunnels on a 3-section INI file
+// prints all three tunnel names without error and without writing files.
+func TestMain_ListTunnels(t *testing.T) {
+	dir := t.TempDir()
+	iniContent := "[alpha]\ntype = client\nport = 1111\n\n[beta]\ntype = server\ndestination = example.b32.i2p\n\n[gamma]\ntype = client\nport = 3333\n"
+	src := filepath.Join(dir, "tunnels.conf")
+	if err := os.WriteFile(src, []byte(iniContent), 0o644); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+
+	// Capture stdout.
+	origStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	app := newApp()
+	runErr := app.Run([]string{
+		"go-i2ptunnel-config",
+		"--list-tunnels",
+		src,
+	})
+
+	w.Close()
+	os.Stdout = origStdout
+	var buf strings.Builder
+	tmp := make([]byte, 4096)
+	for {
+		n, err := r.Read(tmp)
+		buf.Write(tmp[:n])
+		if err != nil {
+			break
+		}
+	}
+	r.Close()
+
+	if runErr != nil {
+		t.Fatalf("unexpected error: %v", runErr)
+	}
+	output := buf.String()
+	for _, name := range []string{"alpha", "beta", "gamma"} {
+		if !strings.Contains(output, name) {
+			t.Errorf("--list-tunnels output missing tunnel '%s'; got:\n%s", name, output)
+		}
+	}
+
+	// No output files should have been created in the temp dir.
+	entries, _ := os.ReadDir(dir)
+	for _, e := range entries {
+		if e.Name() != "tunnels.conf" {
+			t.Errorf("unexpected file created: %s", e.Name())
+		}
+	}
+}

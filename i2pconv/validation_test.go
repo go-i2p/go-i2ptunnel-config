@@ -542,10 +542,13 @@ func TestValidationContext_TunnelTypeSpecs(t *testing.T) {
 		})
 	}
 
-	// Test GetSupportedTunnelTypes
+	// Test GetSupportedTunnelTypes: 12 canonical types + 3 i2pd alias entries
+	// ("http" → httpclient, "socks" → sockstunnel, "udptunnel" → client)
+	const aliasCount = 3
 	supportedTypes := ctx.GetSupportedTunnelTypes()
-	if len(supportedTypes) != len(expectedTypes) {
-		t.Errorf("expected %d supported types, got %d", len(expectedTypes), len(supportedTypes))
+	expectedTotal := len(expectedTypes) + aliasCount
+	if len(supportedTypes) != expectedTotal {
+		t.Errorf("expected %d supported types (canonical + aliases), got %d", expectedTotal, len(supportedTypes))
 	}
 
 	// Test GetTunnelTypeDescription

@@ -1299,3 +1299,44 @@ func TestConvertCommand_StdinDryRun(t *testing.T) {
 		t.Errorf("dry-run must not write files, found: %v", matches)
 	}
 }
+
+// TestWriteSplitTunnels_WriteError verifies that writeSplitTunnels continues
+// gracefully when os.WriteFile fails (e.g., read-only output directory) rather
+// than returning an error, and that it still returns nil.
+func TestWriteSplitTunnels_WriteError(t *testing.T) {
+	iniContent := "[TunnelX]\ntype = httpclient\nhost = 127.0.0.1\nport = 7777\n\n" +
+		"[TunnelY]\ntype = httpclient\nhost = 127.0.0.1\nport = 8888\n"
+
+	srcDir := t.TempDir()
+	inputFile := filepath.Join(srcDir, "tunnels.conf")
+	if err := os.WriteFile(inputFile, []byte(iniContent), 0o644); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+
+	// Create a read-only directory to use as the working directory so that
+	// writeSplitTunnels cannot create the per-tunnel output files.
+	roDir := filepath.Join(srcDir, "readonly")
+	if err := os.MkdirAll(roDir, 0o555); err != nil {
+		t.Fatalf("setup readonly dir: %v", err)
+	}
+	t.Cleanup(func() { os.Chmod(roDir, 0o755) }) // make removable by t.TempDir
+
+	origWd, _ := os.Getwd()
+	if err := os.Chdir(roDir); err != nil {
+		t.Fatalf("chdir to readonly dir: %v", err)
+	}
+	defer os.Chdir(origWd)
+
+	converter := &Converter{}
+	// writeSplitTunnels logs errors per-tunnel but returns nil overall.
+	err := writeSplitTunnels(inputFile, "ini", "yaml", false, converter)
+	if err != nil {
+		t.Errorf("writeSplitTunnels should return nil even on write failures, got: %v", err)
+	}
+
+	// Confirm no output files were created in the read-only directory.
+	entries, _ := os.ReadDir(roDir)
+	if len(entries) > 0 {
+		t.Errorf("expected no files in read-only dir, found: %v", entries)
+	}
+}
