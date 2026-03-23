@@ -163,6 +163,69 @@ option.i2cp.reduceIdleTime=600000
 				Outbound: make(map[string]interface{}),
 			},
 		},
+		{
+			name: "full tunnel.0 block with targetDestination, targetPort, and custom field",
+			input: `
+tunnel.0.name=FullServer
+tunnel.0.type=server
+tunnel.0.interface=0.0.0.0
+tunnel.0.listenPort=9000
+tunnel.0.targetDestination=example.b32.i2p
+tunnel.0.targetPort=8080
+tunnel.0.description=Full server tunnel
+tunnel.0.customkey=customvalue
+`,
+			expected: &TunnelConfig{
+				Name:        "FullServer",
+				Type:        "server",
+				Interface:   "0.0.0.0",
+				Port:        9000,
+				Target:      "example.b32.i2p",
+				Description: "Full server tunnel",
+				I2CP:        make(map[string]interface{}),
+				Tunnel: map[string]interface{}{
+					"targetPort": 8080,
+					"customkey":  "customvalue",
+				},
+				Inbound:  make(map[string]interface{}),
+				Outbound: make(map[string]interface{}),
+			},
+		},
+		{
+			name: "targetHost sets Target when empty",
+			input: `
+tunnel.0.name=HostTunnel
+tunnel.0.type=client
+tunnel.0.targetHost=192.168.1.50
+`,
+			expected: &TunnelConfig{
+				Name:     "HostTunnel",
+				Type:     "client",
+				Target:   "192.168.1.50",
+				I2CP:     make(map[string]interface{}),
+				Tunnel:   make(map[string]interface{}),
+				Inbound:  make(map[string]interface{}),
+				Outbound: make(map[string]interface{}),
+			},
+		},
+		{
+			name: "alternateName stored when config.Name already set",
+			input: `
+name=PrimaryName
+tunnel.0.type=client
+tunnel.1.name=AltName
+`,
+			expected: &TunnelConfig{
+				Name: "PrimaryName",
+				Type: "client",
+				I2CP: make(map[string]interface{}),
+				Tunnel: map[string]interface{}{
+					"alternateName": "AltName",
+				},
+				Inbound:  make(map[string]interface{}),
+				Outbound: make(map[string]interface{}),
+			},
+		},
 	}
 
 	conv := &Converter{}
@@ -364,4 +427,45 @@ tunnel.1.type=server`
 // valuesEqual compares two values, handling slices properly
 func valuesEqual(expected, actual interface{}) bool {
 	return reflect.DeepEqual(expected, actual)
+}
+
+// TestParseNumberedTunnelPropertyNilMaps calls parseNumberedTunnelProperty directly
+// with nil Tunnel maps to cover the nil-init guard branches that are unreachable
+// through parseJavaProperties (which always pre-initialises all maps).
+func TestParseNumberedTunnelPropertyNilMaps(t *testing.T) {
+	conv := &Converter{}
+
+	nilTunnel := func() *TunnelConfig {
+		return &TunnelConfig{
+			I2CP:     make(map[string]interface{}),
+			Inbound:  make(map[string]interface{}),
+			Outbound: make(map[string]interface{}),
+			// Tunnel intentionally nil
+		}
+	}
+
+	t.Run("targetPort with nil Tunnel initialises map", func(t *testing.T) {
+		c := nilTunnel()
+		conv.parseNumberedTunnelProperty("targetPort", "9090", c)
+		if got, ok := c.Tunnel["targetPort"]; !ok || got != 9090 {
+			t.Errorf("expected Tunnel[targetPort]=9090, got %v", got)
+		}
+	})
+
+	t.Run("default property with nil Tunnel initialises map", func(t *testing.T) {
+		c := nilTunnel()
+		conv.parseNumberedTunnelProperty("customoption", "customvalue", c)
+		if got, ok := c.Tunnel["customoption"]; !ok || got != "customvalue" {
+			t.Errorf("expected Tunnel[customoption]='customvalue', got %v", got)
+		}
+	})
+
+	t.Run("name alternateName with nil Tunnel initialises map", func(t *testing.T) {
+		c := nilTunnel()
+		c.Name = "Primary"
+		conv.parseNumberedTunnelProperty("name", "Alternate", c)
+		if got, ok := c.Tunnel["alternateName"]; !ok || got != "Alternate" {
+			t.Errorf("expected Tunnel[alternateName]='Alternate', got %v", got)
+		}
+	})
 }

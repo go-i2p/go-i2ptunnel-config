@@ -1,3 +1,12 @@
+// Command go-i2ptunnel-config converts I2P tunnel configuration files between
+// the Java I2P (.config / .properties), i2pd (.conf / .ini), and go-i2p (.yaml)
+// formats.
+//
+// Usage:
+//
+//	go-i2ptunnel-config [options] <input-file> [output-file]
+//
+// Run go-i2ptunnel-config --help for the full list of flags.
 package main
 
 import (

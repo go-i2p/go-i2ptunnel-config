@@ -1,3 +1,13 @@
+// Package i2pconv converts I2P tunnel configuration files between three formats:
+//
+//   - Java I2P: .config (INI-like) and .properties (key=value) files used by the
+//     Java reference I2P router.
+//   - i2pd: .conf / .ini files used by the C++ i2pd router.
+//   - go-i2p: .yaml files used by go-i2p and SAM-based Go applications.
+//
+// The package supports format auto-detection, strict validation, dry-run mode,
+// batch processing of multiple files, and SAM-based I2P key management — all
+// without requiring network connectivity.
 package i2pconv
 
 import (
