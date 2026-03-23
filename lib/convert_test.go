@@ -1,6 +1,7 @@
 package i2pconv
 
 import (
+	goflag "flag"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -799,4 +800,228 @@ func TestReportBatchResults(t *testing.T) {
 			}
 		})
 	}
+}
+
+// makeBatchContext constructs a cli.Context suitable for ProcessBatch calls in tests.
+// It registers exactly the flags that ProcessBatch reads and sets their initial values.
+func makeBatchContext(outFormat string, validate, dryRun, strict bool) *cli.Context {
+	app := cli.NewApp()
+	set := goflag.NewFlagSet("test", goflag.ContinueOnError)
+	set.String("in-format", "", "Input format")
+	set.String("out-format", outFormat, "Output format")
+	set.Bool("validate", validate, "Validate only")
+	set.Bool("strict", strict, "Strict validation")
+	set.Bool("dry-run", dryRun, "Dry run")
+	// Parse with no args so all flags keep their default values.
+	_ = set.Parse(nil)
+	return cli.NewContext(app, set, nil)
+}
+
+// TestProcessBatch tests ProcessBatch end-to-end using a real cli.Context.
+func TestProcessBatch(t *testing.T) {
+	validContent := "name=test-tunnel\ntype=httpclient\ninterface=127.0.0.1\nlistenPort=8080\n"
+	invalidContent := "invalid content without required fields"
+
+	t.Run("valid glob matches multiple files", func(t *testing.T) {
+		dir := t.TempDir()
+		for _, name := range []string{"tunnel1.properties", "tunnel2.properties", "tunnel3.properties"} {
+			if err := os.WriteFile(filepath.Join(dir, name), []byte(validContent), 0644); err != nil {
+				t.Fatalf("failed to create test file: %v", err)
+			}
+		}
+
+		ctx := makeBatchContext("yaml", false, true, false) // dry-run: no files written
+		results, err := ProcessBatch(filepath.Join(dir, "*.properties"), ctx)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(results) != 3 {
+			t.Errorf("expected 3 results, got %d", len(results))
+		}
+		for _, r := range results {
+			if !r.Success {
+				t.Errorf("expected success for %s, got: %v", r.InputFile, r.Error)
+			}
+		}
+	})
+
+	t.Run("no matching files returns error", func(t *testing.T) {
+		dir := t.TempDir()
+		ctx := makeBatchContext("yaml", false, false, false)
+
+		_, err := ProcessBatch(filepath.Join(dir, "*.nonexistent"), ctx)
+		if err == nil {
+			t.Fatal("expected error but got none")
+		}
+		if !strings.Contains(err.Error(), "no files match pattern") {
+			t.Errorf("expected 'no files match pattern' in error, got: %q", err.Error())
+		}
+	})
+
+	t.Run("mix of valid and invalid files", func(t *testing.T) {
+		dir := t.TempDir()
+		for _, name := range []string{"tunnel1.properties", "tunnel2.properties", "tunnel3.properties"} {
+			if err := os.WriteFile(filepath.Join(dir, name), []byte(validContent), 0644); err != nil {
+				t.Fatalf("failed to create test file: %v", err)
+			}
+		}
+		if err := os.WriteFile(filepath.Join(dir, "bad.properties"), []byte(invalidContent), 0644); err != nil {
+			t.Fatalf("failed to create invalid test file: %v", err)
+		}
+
+		// dry-run so valid files don't produce output files
+		ctx := makeBatchContext("yaml", false, true, false)
+		results, err := ProcessBatch(filepath.Join(dir, "*.properties"), ctx)
+		if err == nil {
+			t.Fatal("expected error for mixed results but got none")
+		}
+		if !strings.Contains(err.Error(), "failed processing") {
+			t.Errorf("expected 'failed processing' in error, got: %q", err.Error())
+		}
+
+		successCount, failureCount := 0, 0
+		for _, r := range results {
+			if r.Success {
+				successCount++
+			} else {
+				failureCount++
+			}
+		}
+		if failureCount == 0 {
+			t.Error("expected at least one failure")
+		}
+		if successCount == 0 {
+			t.Error("expected at least one success")
+		}
+	})
+
+	t.Run("dry-run writes no output files", func(t *testing.T) {
+		dir := t.TempDir()
+		if err := os.WriteFile(filepath.Join(dir, "tunnel.properties"), []byte(validContent), 0644); err != nil {
+			t.Fatalf("failed to create test file: %v", err)
+		}
+
+		ctx := makeBatchContext("yaml", false, true, false)
+		_, err := ProcessBatch(filepath.Join(dir, "*.properties"), ctx)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		matches, _ := filepath.Glob(filepath.Join(dir, "*.yaml"))
+		if len(matches) > 0 {
+			t.Errorf("dry-run should not write files, but found: %v", matches)
+		}
+	})
+
+	t.Run("validate mode writes no output files", func(t *testing.T) {
+		dir := t.TempDir()
+		if err := os.WriteFile(filepath.Join(dir, "tunnel.properties"), []byte(validContent), 0644); err != nil {
+			t.Fatalf("failed to create test file: %v", err)
+		}
+
+		ctx := makeBatchContext("yaml", true, false, false)
+		_, err := ProcessBatch(filepath.Join(dir, "*.properties"), ctx)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		matches, _ := filepath.Glob(filepath.Join(dir, "*.yaml"))
+		if len(matches) > 0 {
+			t.Errorf("validate mode should not write files, but found: %v", matches)
+		}
+	})
+}
+
+// TestConvertCommandBatchIntegration tests --batch mode through the full cli.App.
+func TestConvertCommandBatchIntegration(t *testing.T) {
+	validContent := "name=test-tunnel\ntype=httpclient\ninterface=127.0.0.1\nlistenPort=8080\n"
+
+	makeApp := func() *cli.App {
+		return &cli.App{
+			Name: "go-i2ptunnel-config",
+			Flags: []cli.Flag{
+				&cli.StringFlag{Name: "in-format"},
+				&cli.StringFlag{Name: "out-format", Value: "yaml"},
+				&cli.StringFlag{Name: "output, o"},
+				&cli.BoolFlag{Name: "validate"},
+				&cli.BoolFlag{Name: "strict"},
+				&cli.BoolFlag{Name: "dry-run"},
+				&cli.BoolFlag{Name: "batch"},
+			},
+			Action: ConvertCommand,
+		}
+	}
+
+	t.Run("batch dry-run converts multiple files", func(t *testing.T) {
+		dir := t.TempDir()
+		for _, name := range []string{"a.properties", "b.properties"} {
+			if err := os.WriteFile(filepath.Join(dir, name), []byte(validContent), 0644); err != nil {
+				t.Fatalf("failed to create test file: %v", err)
+			}
+		}
+
+		app := makeApp()
+		pattern := filepath.Join(dir, "*.properties")
+		err := app.Run([]string{"go-i2ptunnel-config", "--batch", "--dry-run", pattern})
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+
+		// Verify no output files were written
+		matches, _ := filepath.Glob(filepath.Join(dir, "*.yaml"))
+		if len(matches) > 0 {
+			t.Errorf("dry-run batch should not write files, found: %v", matches)
+		}
+	})
+
+	t.Run("batch converts files to output format", func(t *testing.T) {
+		dir := t.TempDir()
+		originalWd, _ := os.Getwd()
+		defer os.Chdir(originalWd)
+		os.Chdir(dir)
+
+		for _, name := range []string{"x.properties", "y.properties"} {
+			if err := os.WriteFile(filepath.Join(dir, name), []byte(validContent), 0644); err != nil {
+				t.Fatalf("failed to create test file: %v", err)
+			}
+		}
+
+		app := makeApp()
+		pattern := filepath.Join(dir, "*.properties")
+		err := app.Run([]string{"go-i2ptunnel-config", "--batch", "--out-format", "yaml", pattern})
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+
+		for _, expected := range []string{"x.yaml", "y.yaml"} {
+			if _, statErr := os.Stat(filepath.Join(dir, expected)); os.IsNotExist(statErr) {
+				t.Errorf("expected output file %q was not created", expected)
+			}
+		}
+	})
+
+	t.Run("batch with no matching files returns error", func(t *testing.T) {
+		dir := t.TempDir()
+		app := makeApp()
+		pattern := filepath.Join(dir, "*.nonexistent")
+		err := app.Run([]string{"go-i2ptunnel-config", "--batch", pattern})
+		if err == nil {
+			t.Fatal("expected error but got none")
+		}
+		if !strings.Contains(err.Error(), "no files match pattern") {
+			t.Errorf("expected 'no files match pattern', got: %q", err.Error())
+		}
+	})
+
+	t.Run("batch with output flag returns error", func(t *testing.T) {
+		dir := t.TempDir()
+		app := makeApp()
+		err := app.Run([]string{"go-i2ptunnel-config", "--batch", "--output", "out.yaml", filepath.Join(dir, "*.properties")})
+		if err == nil {
+			t.Fatal("expected error but got none")
+		}
+		if !strings.Contains(err.Error(), "cannot specify output file in batch mode") {
+			t.Errorf("expected 'cannot specify output file in batch mode', got: %q", err.Error())
+		}
+	})
 }
