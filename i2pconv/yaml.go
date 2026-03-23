@@ -22,6 +22,26 @@ func countYAMLTunnels(input []byte) int {
 	return len(w.Tunnels)
 }
 
+// splitYAMLTunnels returns one TunnelConfig per key in the top-level "tunnels" map.
+func splitYAMLTunnels(input []byte) ([]*TunnelConfig, error) {
+	type wrapper struct {
+		Tunnels map[string]*TunnelConfig `yaml:"tunnels"`
+	}
+	var w wrapper
+	if err := yaml.Unmarshal(input, &w); err != nil {
+		return nil, fmt.Errorf("yaml parse error: %w", err)
+	}
+	if len(w.Tunnels) == 0 {
+		return nil, fmt.Errorf("yaml: no tunnels found in tunnels map")
+	}
+	configs := make([]*TunnelConfig, 0, len(w.Tunnels))
+	for name, cfg := range w.Tunnels {
+		cfg.Name = name
+		configs = append(configs, cfg)
+	}
+	return configs, nil
+}
+
 // parseYAML parses YAML using the standard nested structure with "tunnels" map.
 // This is the go-i2p format where tunnels are defined in a "tunnels" map.
 // The parser extracts the first tunnel for single-tunnel conversion workflows.

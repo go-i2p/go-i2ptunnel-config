@@ -57,42 +57,10 @@ func (c *Converter) enhancePropertiesError(input []byte, err error) error {
 	return fmt.Errorf("properties parse error: %w", err)
 }
 
-// parsePropertyKey parses a single Java I2P property key-value pair and updates the TunnelConfig.
-// Supports multiple Java I2P property patterns:
-//
-// Flat properties:
-//   - name, type, interface, listenPort, targetDestination, targetHost, description
-//   - proxyList, sharedClient, startOnLoad, accessList, targetPort, spoofedHost (stored in Tunnel map)
-//   - i2cpHost, i2cpPort (stored in I2CP map)
-//
-// Numbered tunnel patterns:
-//   - tunnel.N.property (e.g., tunnel.0.name, tunnel.1.type, tunnel.2.interface)
-//
-// Option prefixes:
-//   - option.i2cp.* -> stored in I2CP map
-//   - option.i2ptunnel.* -> stored in Tunnel map
-//   - option.inbound.* -> stored in Inbound map
-//   - option.outbound.* -> stored in Outbound map
-//   - option.persistentClientKey -> sets PersistentKey field
-//
-// Comments (#) and configFile properties are ignored.
-func (c *Converter) parsePropertyKey(k, s string, config *TunnelConfig) {
-	if strings.HasPrefix(k, "#") || strings.HasPrefix(k, "configFile") {
-		return // Skip comments and config file path
-	}
-
-	// Handle tunnel.N.property patterns for numbered tunnels
-	if strings.HasPrefix(k, "tunnel.") && strings.Contains(k, ".") {
-		parts := strings.SplitN(k, ".", 3)
-		if len(parts) == 3 {
-			// Format: tunnel.N.property (e.g., tunnel.0.name, tunnel.1.type)
-			property := parts[2]
-			c.parseNumberedTunnelProperty(property, s, config)
-			return
-		}
-	}
-
-	// Handle flat keys
+// parseFlatPropertyKey handles the set of well-known flat (non-prefixed) Java I2P
+// property keys and updates config accordingly. It returns true when the key was
+// recognised and handled, false otherwise.
+func parseFlatPropertyKey(k, s string, config *TunnelConfig) bool {
 	switch k {
 	case "name":
 		config.Name = s
@@ -107,7 +75,7 @@ func (c *Converter) parsePropertyKey(k, s string, config *TunnelConfig) {
 	case "targetDestination":
 		config.Target = s
 	case "targetHost":
-		config.Target = s // Alternative naming
+		config.Target = s
 	case "targetPort":
 		if port, err := strconv.Atoi(s); err == nil {
 			if config.Tunnel == nil {
@@ -154,36 +122,84 @@ func (c *Converter) parsePropertyKey(k, s string, config *TunnelConfig) {
 		if port, err := strconv.Atoi(s); err == nil {
 			config.I2CP["port"] = port
 		}
+	default:
+		return false
 	}
+	return true
+}
 
-	// Handle prefixed keys
-	if strings.HasPrefix(k, "option.i2cp.") {
+// parsePrefixedPropertyKey handles Java I2P option.* prefix patterns and updates
+// config accordingly. It returns true when the key matched a known prefix, false
+// otherwise.
+func parsePrefixedPropertyKey(k, s string, config *TunnelConfig) bool {
+	switch {
+	case strings.HasPrefix(k, "option.i2cp."):
 		if config.I2CP == nil {
 			config.I2CP = make(map[string]interface{})
 		}
-		key := strings.TrimPrefix(k, "option.i2cp.")
-		config.I2CP[key] = parseValue(s)
-	} else if strings.HasPrefix(k, "option.i2ptunnel.") {
+		config.I2CP[strings.TrimPrefix(k, "option.i2cp.")] = parseValue(s)
+	case strings.HasPrefix(k, "option.i2ptunnel."):
 		if config.Tunnel == nil {
 			config.Tunnel = make(map[string]interface{})
 		}
-		key := strings.TrimPrefix(k, "option.i2ptunnel.")
-		config.Tunnel[key] = parseValue(s)
-	} else if strings.HasPrefix(k, "option.inbound.") {
+		config.Tunnel[strings.TrimPrefix(k, "option.i2ptunnel.")] = parseValue(s)
+	case strings.HasPrefix(k, "option.inbound."):
 		if config.Inbound == nil {
 			config.Inbound = make(map[string]interface{})
 		}
-		key := strings.TrimPrefix(k, "option.inbound.")
-		config.Inbound[key] = parseValue(s)
-	} else if strings.HasPrefix(k, "option.outbound.") {
+		config.Inbound[strings.TrimPrefix(k, "option.inbound.")] = parseValue(s)
+	case strings.HasPrefix(k, "option.outbound."):
 		if config.Outbound == nil {
 			config.Outbound = make(map[string]interface{})
 		}
-		key := strings.TrimPrefix(k, "option.outbound.")
-		config.Outbound[key] = parseValue(s)
-	} else if k == "option.persistentClientKey" {
-		config.PersistentKey = parseValue(s).(bool)
+		config.Outbound[strings.TrimPrefix(k, "option.outbound.")] = parseValue(s)
+	case k == "option.persistentClientKey":
+		if b, ok := parseValue(s).(bool); ok {
+			config.PersistentKey = b
+		}
+	default:
+		return false
 	}
+	return true
+}
+
+// parsePropertyKey parses a single Java I2P property key-value pair and updates the TunnelConfig.
+// Supports multiple Java I2P property patterns:
+//
+// Flat properties:
+//   - name, type, interface, listenPort, targetDestination, targetHost, description
+//   - proxyList, sharedClient, startOnLoad, accessList, targetPort, spoofedHost (stored in Tunnel map)
+//   - i2cpHost, i2cpPort (stored in I2CP map)
+//
+// Numbered tunnel patterns:
+//   - tunnel.N.property (e.g., tunnel.0.name, tunnel.1.type, tunnel.2.interface)
+//
+// Option prefixes:
+//   - option.i2cp.* -> stored in I2CP map
+//   - option.i2ptunnel.* -> stored in Tunnel map
+//   - option.inbound.* -> stored in Inbound map
+//   - option.outbound.* -> stored in Outbound map
+//   - option.persistentClientKey -> sets PersistentKey field
+//
+// Comments (#) and configFile properties are ignored.
+func (c *Converter) parsePropertyKey(k, s string, config *TunnelConfig) {
+	if strings.HasPrefix(k, "#") || strings.HasPrefix(k, "configFile") {
+		return
+	}
+
+	// Handle tunnel.N.property patterns for numbered tunnels
+	if strings.HasPrefix(k, "tunnel.") && strings.Contains(k, ".") {
+		parts := strings.SplitN(k, ".", 3)
+		if len(parts) == 3 {
+			c.parseNumberedTunnelProperty(parts[2], s, config)
+			return
+		}
+	}
+
+	if parseFlatPropertyKey(k, s, config) {
+		return
+	}
+	parsePrefixedPropertyKey(k, s, config)
 }
 
 // parseNumberedTunnelProperty handles properties from tunnel.N.property patterns
@@ -349,4 +365,69 @@ func formatPropertyValue(v interface{}) string {
 	}
 
 	return fmt.Sprint(v)
+}
+
+// splitPropertiesTunnels returns one TunnelConfig per distinct tunnel.N.* index group.
+// When no numbered tunnel keys are present the whole input is parsed as a single config.
+func (c *Converter) splitPropertiesTunnels(input []byte) ([]*TunnelConfig, error) {
+	p, err := properties.LoadString(string(input))
+	if err != nil {
+		return nil, c.enhancePropertiesError(input, err)
+	}
+	indices := make(map[string]struct{})
+	for _, k := range p.Keys() {
+		if strings.HasPrefix(k, "tunnel.") {
+			if parts := strings.SplitN(k, ".", 3); len(parts) == 3 {
+				indices[parts[1]] = struct{}{}
+			}
+		}
+	}
+	if len(indices) == 0 {
+		cfg, parseErr := c.parseJavaProperties(input)
+		if parseErr != nil {
+			return nil, parseErr
+		}
+		return []*TunnelConfig{cfg}, nil
+	}
+	configs := make([]*TunnelConfig, 0, len(indices))
+	for idx := range indices {
+		prefix := "tunnel." + idx + "."
+		var sb strings.Builder
+		for _, k := range p.Keys() {
+			if strings.HasPrefix(k, prefix) {
+				sb.WriteString(strings.TrimPrefix(k, prefix) + "=" + p.GetString(k, "") + "\n")
+			}
+		}
+		cfg, parseErr := c.parseJavaProperties([]byte(sb.String()))
+		if parseErr != nil {
+			return nil, fmt.Errorf("tunnel index %s: %w", idx, parseErr)
+		}
+		if cfg.Name == "" {
+			cfg.Name = "tunnel-" + idx
+		}
+		configs = append(configs, cfg)
+	}
+	return configs, nil
+}
+
+// countPropertiesTunnels returns the number of distinct tunnel.N.* index groups
+// present in the input. Returns 1 when no numbered tunnel keys are found (the
+// whole file represents a single tunnel).
+func countPropertiesTunnels(input []byte) int {
+	p, err := properties.LoadString(string(input))
+	if err != nil {
+		return 1
+	}
+	indices := make(map[string]struct{})
+	for _, k := range p.Keys() {
+		if strings.HasPrefix(k, "tunnel.") {
+			if parts := strings.SplitN(k, ".", 3); len(parts) == 3 {
+				indices[parts[1]] = struct{}{}
+			}
+		}
+	}
+	if len(indices) == 0 {
+		return 1
+	}
+	return len(indices)
 }

@@ -469,3 +469,271 @@ func TestParseNumberedTunnelPropertyNilMaps(t *testing.T) {
 		}
 	})
 }
+
+// TestParseFlatPropertyKey exercises every branch of the parseFlatPropertyKey helper.
+func TestParseFlatPropertyKey(t *testing.T) {
+	tests := []struct {
+		key     string
+		value   string
+		check   func(t *testing.T, c *TunnelConfig)
+		handled bool
+	}{
+		{
+			key: "name", value: "myTunnel",
+			check:   func(t *testing.T, c *TunnelConfig) { assertEqual(t, "name", c.Name, "myTunnel") },
+			handled: true,
+		},
+		{
+			key: "type", value: "httpclient",
+			check:   func(t *testing.T, c *TunnelConfig) { assertEqual(t, "type", c.Type, "httpclient") },
+			handled: true,
+		},
+		{
+			key: "interface", value: "127.0.0.1",
+			check:   func(t *testing.T, c *TunnelConfig) { assertEqual(t, "interface", c.Interface, "127.0.0.1") },
+			handled: true,
+		},
+		{
+			key: "listenPort", value: "4444",
+			check:   func(t *testing.T, c *TunnelConfig) { assertIntEqual(t, "port", c.Port, 4444) },
+			handled: true,
+		},
+		{
+			key: "targetDestination", value: "example.i2p",
+			check:   func(t *testing.T, c *TunnelConfig) { assertEqual(t, "target", c.Target, "example.i2p") },
+			handled: true,
+		},
+		{
+			key: "targetHost", value: "other.i2p",
+			check:   func(t *testing.T, c *TunnelConfig) { assertEqual(t, "target", c.Target, "other.i2p") },
+			handled: true,
+		},
+		{
+			key: "targetPort", value: "8080",
+			check: func(t *testing.T, c *TunnelConfig) {
+				if got, ok := c.Tunnel["targetPort"]; !ok || got != 8080 {
+					t.Errorf("Tunnel[targetPort]: got %v, want 8080", got)
+				}
+			},
+			handled: true,
+		},
+		{
+			key: "description", value: "a tunnel",
+			check:   func(t *testing.T, c *TunnelConfig) { assertEqual(t, "description", c.Description, "a tunnel") },
+			handled: true,
+		},
+		{
+			key: "proxyList", value: "exit.stormycloud.i2p",
+			check: func(t *testing.T, c *TunnelConfig) {
+				if got, ok := c.Tunnel["proxyList"]; !ok || got != "exit.stormycloud.i2p" {
+					t.Errorf("Tunnel[proxyList]: got %v, want exit.stormycloud.i2p", got)
+				}
+			},
+			handled: true,
+		},
+		{
+			key: "sharedClient", value: "true",
+			check: func(t *testing.T, c *TunnelConfig) {
+				if got, ok := c.Tunnel["sharedClient"]; !ok || got != true {
+					t.Errorf("Tunnel[sharedClient]: got %v, want true", got)
+				}
+			},
+			handled: true,
+		},
+		{
+			key: "startOnLoad", value: "true",
+			check: func(t *testing.T, c *TunnelConfig) {
+				if got, ok := c.Tunnel["startOnLoad"]; !ok || got != true {
+					t.Errorf("Tunnel[startOnLoad]: got %v, want true", got)
+				}
+			},
+			handled: true,
+		},
+		{
+			key: "accessList", value: "host1.i2p,host2.i2p",
+			check: func(t *testing.T, c *TunnelConfig) {
+				if _, ok := c.Tunnel["accessList"]; !ok {
+					t.Error("Tunnel[accessList] not set")
+				}
+			},
+			handled: true,
+		},
+		{
+			key: "spoofedHost", value: "spoof.i2p",
+			check: func(t *testing.T, c *TunnelConfig) {
+				if got, ok := c.Tunnel["spoofedHost"]; !ok || got != "spoof.i2p" {
+					t.Errorf("Tunnel[spoofedHost]: got %v, want spoof.i2p", got)
+				}
+			},
+			handled: true,
+		},
+		{
+			key: "i2cpHost", value: "127.0.0.1",
+			check: func(t *testing.T, c *TunnelConfig) {
+				if got, ok := c.I2CP["host"]; !ok || got != "127.0.0.1" {
+					t.Errorf("I2CP[host]: got %v, want 127.0.0.1", got)
+				}
+			},
+			handled: true,
+		},
+		{
+			key: "i2cpPort", value: "7654",
+			check: func(t *testing.T, c *TunnelConfig) {
+				if got, ok := c.I2CP["port"]; !ok || got != 7654 {
+					t.Errorf("I2CP[port]: got %v, want 7654", got)
+				}
+			},
+			handled: true,
+		},
+		{
+			key:     "unknownKey",
+			value:   "x",
+			check:   func(t *testing.T, c *TunnelConfig) {},
+			handled: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.key, func(t *testing.T) {
+			c := &TunnelConfig{}
+			got := parseFlatPropertyKey(tt.key, tt.value, c)
+			if got != tt.handled {
+				t.Errorf("parseFlatPropertyKey(%q) handled=%v, want %v", tt.key, got, tt.handled)
+			}
+			tt.check(t, c)
+		})
+	}
+}
+
+// TestParsePrefixedPropertyKey exercises every branch of the parsePrefixedPropertyKey helper.
+func TestParsePrefixedPropertyKey(t *testing.T) {
+	tests := []struct {
+		key     string
+		value   string
+		check   func(t *testing.T, c *TunnelConfig)
+		handled bool
+	}{
+		{
+			key: "option.i2cp.leaseSetEncType", value: "4",
+			check: func(t *testing.T, c *TunnelConfig) {
+				if got, ok := c.I2CP["leaseSetEncType"]; !ok || got != 4 {
+					t.Errorf("I2CP[leaseSetEncType]: got %v, want 4", got)
+				}
+			},
+			handled: true,
+		},
+		{
+			key: "option.i2ptunnel.maxParticipants", value: "10",
+			check: func(t *testing.T, c *TunnelConfig) {
+				if got, ok := c.Tunnel["maxParticipants"]; !ok || got != 10 {
+					t.Errorf("Tunnel[maxParticipants]: got %v, want 10", got)
+				}
+			},
+			handled: true,
+		},
+		{
+			key: "option.inbound.length", value: "3",
+			check: func(t *testing.T, c *TunnelConfig) {
+				if got, ok := c.Inbound["length"]; !ok || got != 3 {
+					t.Errorf("Inbound[length]: got %v, want 3", got)
+				}
+			},
+			handled: true,
+		},
+		{
+			key: "option.outbound.length", value: "2",
+			check: func(t *testing.T, c *TunnelConfig) {
+				if got, ok := c.Outbound["length"]; !ok || got != 2 {
+					t.Errorf("Outbound[length]: got %v, want 2", got)
+				}
+			},
+			handled: true,
+		},
+		{
+			key: "option.persistentClientKey", value: "true",
+			check: func(t *testing.T, c *TunnelConfig) {
+				if !c.PersistentKey {
+					t.Error("PersistentKey should be true")
+				}
+			},
+			handled: true,
+		},
+		{
+			key:     "unknownPrefix",
+			value:   "x",
+			check:   func(t *testing.T, c *TunnelConfig) {},
+			handled: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.key, func(t *testing.T) {
+			c := &TunnelConfig{}
+			got := parsePrefixedPropertyKey(tt.key, tt.value, c)
+			if got != tt.handled {
+				t.Errorf("parsePrefixedPropertyKey(%q) handled=%v, want %v", tt.key, got, tt.handled)
+			}
+			tt.check(t, c)
+		})
+	}
+}
+
+// assertEqual is a tiny local helper for string comparison used by TestParseFlatPropertyKey.
+func assertEqual(t *testing.T, field, got, want string) {
+	t.Helper()
+	if got != want {
+		t.Errorf("%s: got %q, want %q", field, got, want)
+	}
+}
+
+// assertIntEqual is a tiny local helper for int comparison.
+func assertIntEqual(t *testing.T, field string, got, want int) {
+	t.Helper()
+	if got != want {
+		t.Errorf("%s: got %d, want %d", field, got, want)
+	}
+}
+
+// TestCountPropertiesTunnels verifies the new countPropertiesTunnels helper.
+func TestCountPropertiesTunnels(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  int
+	}{
+		{
+			name:  "single tunnel via numbered keys",
+			input: "tunnel.0.name=A\ntunnel.0.type=httpclient\n",
+			want:  1,
+		},
+		{
+			name:  "two tunnels via numbered keys",
+			input: "tunnel.0.name=A\ntunnel.0.listenPort=4444\ntunnel.1.name=B\ntunnel.1.listenPort=5555\n",
+			want:  2,
+		},
+		{
+			name:  "three tunnels via numbered keys",
+			input: "tunnel.0.name=A\ntunnel.1.name=B\ntunnel.2.name=C\n",
+			want:  3,
+		},
+		{
+			name:  "flat keys only treated as single tunnel",
+			input: "name=myTunnel\ntype=httpclient\n",
+			want:  1,
+		},
+		{
+			name:  "empty input treated as single tunnel",
+			input: "",
+			want:  1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := countPropertiesTunnels([]byte(tt.input))
+			if got != tt.want {
+				t.Errorf("countPropertiesTunnels: got %d, want %d", got, tt.want)
+			}
+		})
+	}
+}

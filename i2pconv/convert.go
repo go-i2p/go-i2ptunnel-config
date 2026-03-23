@@ -2,6 +2,7 @@ package i2pconv
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -46,6 +47,8 @@ func ProcessBatch(pattern string, c *cli.Context) ([]BatchResult, error) {
 	validateOnly := c.Bool("validate")
 	strict := c.Bool("strict")
 	dryRun := c.Bool("dry-run")
+	sam := c.Bool("sam")
+	keystore := c.String("keystore")
 
 	// Process each file individually
 	results := make([]BatchResult, 0, len(files))
@@ -58,7 +61,7 @@ func ProcessBatch(pattern string, c *cli.Context) ([]BatchResult, error) {
 		}
 
 		// Process single file using existing logic
-		err := processSingleFile(inputFile, "", inputFormat, outputFormat, validateOnly, dryRun, converter)
+		err := processSingleFile(inputFile, "", inputFormat, outputFormat, validateOnly, dryRun, sam, keystore, converter)
 		if err != nil {
 			result.Success = false
 			result.Error = err
@@ -147,15 +150,32 @@ func reportBatchResults(results []BatchResult, validateOnly, dryRun bool) error 
 //   - outputFormat: Output format
 //   - validateOnly: Whether to only validate without conversion
 //   - dryRun: Whether to print output instead of writing to file
+//   - sam: Whether to generate or load SAM I2P keys
+//   - keystore: Directory for SAM .keys files (empty string uses current working directory)
 //   - converter: Converter instance with configuration
 //
 // Returns:
 //   - error: Any error that occurred during processing
-func processSingleFile(inputFile, outputFile, inputFormat, outputFormat string, validateOnly, dryRun bool, converter *Converter) error {
-	// Read input file
-	inputData, err := os.ReadFile(inputFile)
-	if err != nil {
-		return fmt.Errorf("failed to read input file '%s': %w", inputFile, err)
+func processSingleFile(inputFile, outputFile, inputFormat, outputFormat string, validateOnly, dryRun, sam bool, keystore string, converter *Converter) error {
+	// Read input: treat "-" as stdin
+	var inputData []byte
+	var err error
+	if inputFile == "-" {
+		if inputFormat == "" {
+			return fmt.Errorf("reading from stdin requires --in-format")
+		}
+		if !dryRun && outputFile == "" {
+			return fmt.Errorf("reading from stdin requires --output when not using --dry-run")
+		}
+		inputData, err = io.ReadAll(os.Stdin)
+		if err != nil {
+			return fmt.Errorf("failed to read from stdin: %w", err)
+		}
+	} else {
+		inputData, err = os.ReadFile(inputFile)
+		if err != nil {
+			return fmt.Errorf("failed to read input file '%s': %w", inputFile, err)
+		}
 	}
 
 	// Auto-detect input format if not specified
@@ -184,6 +204,11 @@ func processSingleFile(inputFile, outputFile, inputFormat, outputFormat string, 
 			fmt.Fprintf(os.Stderr, "⚠ Input '%s' contains %d tunnels; only '%s' was converted. Use --batch to process each file individually.\n",
 				inputFile, n, config.Name)
 		}
+	case "properties":
+		if n := countPropertiesTunnels(inputData); n > 1 {
+			fmt.Fprintf(os.Stderr, "⚠ Input '%s' contains %d tunnels; only '%s' was converted. Use --batch to process each file individually.\n",
+				inputFile, n, config.Name)
+		}
 	}
 
 	// Validate configuration
@@ -206,6 +231,19 @@ func processSingleFile(inputFile, outputFile, inputFormat, outputFormat string, 
 	if dryRun {
 		fmt.Printf("# Converted '%s' from %s to %s format:\n", inputFile, inputFormat, outputFormat)
 		fmt.Println(string(outputData))
+		// SAM dry-run: print options without writing key files
+		if sam || config.PersistentKey {
+			cfgCopy := *config
+			cfgCopy.PersistentKey = false
+			_, opts, samErr := cfgCopy.SAMTunnelAt("")
+			if samErr != nil {
+				return fmt.Errorf("failed to compute SAM options for '%s': %w", inputFile, samErr)
+			}
+			fmt.Printf("# SAM options for '%s':\n", config.Name)
+			for _, opt := range opts {
+				fmt.Printf("  %s\n", opt)
+			}
+		}
 		return nil
 	}
 
@@ -217,6 +255,21 @@ func processSingleFile(inputFile, outputFile, inputFormat, outputFormat string, 
 	// Write output file
 	if err := os.WriteFile(outputFile, outputData, 0o644); err != nil {
 		return fmt.Errorf("failed to write output file '%s': %w", outputFile, err)
+	}
+
+	// Generate or load SAM keys when requested or when tunnel has persistentKey set
+	if sam || config.PersistentKey {
+		_, _, samErr := config.SAMTunnelAt(keystore)
+		if samErr != nil {
+			return fmt.Errorf("failed to generate SAM keys for '%s': %w", inputFile, samErr)
+		}
+		if config.PersistentKey && config.Name != "" {
+			ks := keystore
+			if ks == "" {
+				ks, _ = os.Getwd()
+			}
+			fmt.Fprintf(os.Stderr, "\u2139 SAM keys: %s\n", filepath.Join(ks, config.Name+".keys"))
+		}
 	}
 
 	return nil
@@ -279,10 +332,23 @@ func ConvertCommand(c *cli.Context) error {
 	strict := c.Bool("strict")
 	dryRun := c.Bool("dry-run")
 	batchMode := c.Bool("batch")
+	sam := c.Bool("sam")
+	keystore := c.String("keystore")
+	split := c.Bool("split")
+	listTunnels := c.Bool("list-tunnels")
 
 	// Handle output file priority: --output flag takes precedence over positional argument
 	if outputFlag != "" {
 		outputFile = outputFlag
+	}
+
+	// --split / --list-tunnels mode: operate on all tunnels in the input file
+	if split || listTunnels {
+		converter := &Converter{strict: strict}
+		if listTunnels {
+			return listTunnelNames(inputArg, inputFormat, converter)
+		}
+		return writeSplitTunnels(inputArg, inputFormat, outputFormat, dryRun, converter)
 	}
 
 	// Check for incompatible options in batch mode
@@ -306,7 +372,7 @@ func ConvertCommand(c *cli.Context) error {
 	converter := &Converter{strict: strict}
 
 	// Use extracted single file processing logic
-	err := processSingleFile(inputFile, outputFile, inputFormat, outputFormat, validateOnly, dryRun, converter)
+	err := processSingleFile(inputFile, outputFile, inputFormat, outputFormat, validateOnly, dryRun, sam, keystore, converter)
 	if err != nil {
 		return err
 	}
@@ -370,4 +436,79 @@ func generateOutputFilename(inputFile, format string) string {
 	default:
 		return base + ".out"
 	}
+}
+
+// extensionForFormat returns the output file extension for a given format name.
+func extensionForFormat(format string) string {
+	switch format {
+	case "properties":
+		return ".properties"
+	case "ini":
+		return ".conf"
+	case "yaml":
+		return ".yaml"
+	default:
+		return ".out"
+	}
+}
+
+// listTunnelNames reads inputFile, splits it into tunnels, and prints each tunnel's name.
+func listTunnelNames(inputFile, inputFormat string, converter *Converter) error {
+	inputData, err := os.ReadFile(inputFile)
+	if err != nil {
+		return fmt.Errorf("failed to read '%s': %w", inputFile, err)
+	}
+	if inputFormat == "" {
+		inputFormat, err = converter.DetectFormat(inputFile)
+		if err != nil {
+			return fmt.Errorf("failed to detect format for '%s': %w", inputFile, err)
+		}
+	}
+	configs, err := converter.SplitTunnels(inputData, inputFormat)
+	if err != nil {
+		return fmt.Errorf("failed to split tunnels in '%s': %w", inputFile, err)
+	}
+	fmt.Printf("Found %d tunnel(s) in '%s' (%s):\n", len(configs), inputFile, inputFormat)
+	for i, cfg := range configs {
+		fmt.Printf("  %d. %s (type: %s)\n", i+1, cfg.Name, cfg.Type)
+	}
+	return nil
+}
+
+// writeSplitTunnels reads inputFile, splits it into tunnels, and writes one output
+// file per tunnel named {tunnel.Name}{ext}. In dry-run mode output is printed to stdout.
+func writeSplitTunnels(inputFile, inputFormat, outputFormat string, dryRun bool, converter *Converter) error {
+	inputData, err := os.ReadFile(inputFile)
+	if err != nil {
+		return fmt.Errorf("failed to read '%s': %w", inputFile, err)
+	}
+	if inputFormat == "" {
+		inputFormat, err = converter.DetectFormat(inputFile)
+		if err != nil {
+			return fmt.Errorf("failed to detect format for '%s': %w", inputFile, err)
+		}
+	}
+	configs, err := converter.SplitTunnels(inputData, inputFormat)
+	if err != nil {
+		return fmt.Errorf("failed to split tunnels in '%s': %w", inputFile, err)
+	}
+	ext := extensionForFormat(outputFormat)
+	for _, cfg := range configs {
+		outData, genErr := converter.generateOutput(cfg, outputFormat)
+		if genErr != nil {
+			fmt.Fprintf(os.Stderr, "✗ Failed to generate output for '%s': %v\n", cfg.Name, genErr)
+			continue
+		}
+		if dryRun {
+			fmt.Printf("# Tunnel '%s' as %s:\n%s\n", cfg.Name, outputFormat, string(outData))
+			continue
+		}
+		outFile := cfg.Name + ext
+		if writeErr := os.WriteFile(outFile, outData, 0o644); writeErr != nil {
+			fmt.Fprintf(os.Stderr, "✗ Failed to write '%s': %v\n", outFile, writeErr)
+			continue
+		}
+		fmt.Printf("✓ Wrote '%s' (%s)\n", outFile, outputFormat)
+	}
+	return nil
 }

@@ -166,3 +166,22 @@ func (c *Converter) DetectFormat(path string) (string, error) {
 	}
 	return "", fmt.Errorf("unsupported file extension: %s", ext)
 }
+
+// SplitTunnels parses all tunnel definitions from input and returns each as a
+// separate TunnelConfig. Unlike ParseInput, which returns only the first tunnel,
+// SplitTunnels handles multi-definition files (multi-section INI, multi-key YAML,
+// numbered tunnel.N.* properties).
+//
+// Supported formats: "properties", "ini", "yaml".
+func (c *Converter) SplitTunnels(input []byte, format string) ([]*TunnelConfig, error) {
+	switch format {
+	case "ini":
+		return c.splitINITunnels(input)
+	case "yaml":
+		return splitYAMLTunnels(input)
+	case "properties":
+		return c.splitPropertiesTunnels(input)
+	default:
+		return nil, fmt.Errorf("unsupported format for SplitTunnels: %s", format)
+	}
+}

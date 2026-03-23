@@ -694,7 +694,7 @@ type=invalid-type
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			err := processSingleFile(tt.inputFile, tt.outputFile, tt.inputFormat,
-				tt.outputFormat, tt.validateOnly, tt.dryRun, converter)
+				tt.outputFormat, tt.validateOnly, tt.dryRun, false, "", converter)
 
 			if tt.expectError {
 				if err == nil {
@@ -812,6 +812,8 @@ func makeBatchContext(outFormat string, validate, dryRun, strict bool) *cli.Cont
 	set.Bool("validate", validate, "Validate only")
 	set.Bool("strict", strict, "Strict validation")
 	set.Bool("dry-run", dryRun, "Dry run")
+	set.Bool("sam", false, "SAM key generation")
+	set.String("keystore", "", "Keystore directory")
 	// Parse with no args so all flags keep their default values.
 	_ = set.Parse(nil)
 	return cli.NewContext(app, set, nil)
@@ -1029,4 +1031,271 @@ func TestConvertCommandBatchIntegration(t *testing.T) {
 			t.Errorf("expected 'cannot specify output file in batch mode', got: %q", err.Error())
 		}
 	})
+}
+
+// makeSAMApp builds a cli.App that includes --sam and --keystore flags alongside
+// the standard flags, routing everything through ConvertCommand.
+func makeSAMApp() *cli.App {
+	return &cli.App{
+		Name: "go-i2ptunnel-config",
+		Flags: []cli.Flag{
+			&cli.StringFlag{Name: "in-format"},
+			&cli.StringFlag{Name: "out-format", Value: "yaml"},
+			&cli.StringFlag{Name: "output", Aliases: []string{"o"}},
+			&cli.BoolFlag{Name: "validate"},
+			&cli.BoolFlag{Name: "strict"},
+			&cli.BoolFlag{Name: "dry-run"},
+			&cli.BoolFlag{Name: "batch"},
+			&cli.BoolFlag{Name: "sam"},
+			&cli.StringFlag{Name: "keystore"},
+		},
+		Action: ConvertCommand,
+	}
+}
+
+// TestConvertCommand_SAMFlag verifies that the --sam flag triggers SAM key generation.
+func TestConvertCommand_SAMFlag(t *testing.T) {
+	// YAML fixture with persistentKey: true so SAMTunnelAt writes a keys file.
+	yamlContent := "tunnels:\n  my-tunnel:\n    type: client\n    interface: 127.0.0.1\n    port: 7654\n    persistentKey: true\n"
+
+	t.Run("--sam creates keys file in keystore", func(t *testing.T) {
+		dir := t.TempDir()
+		inputFile := filepath.Join(dir, "tunnel.yaml")
+		if err := os.WriteFile(inputFile, []byte(yamlContent), 0644); err != nil {
+			t.Fatalf("failed to create test file: %v", err)
+		}
+
+		app := makeSAMApp()
+		err := app.Run([]string{
+			"go-i2ptunnel-config",
+			"--sam",
+			"--out-format", "yaml",
+			"--output", filepath.Join(dir, "out.yaml"),
+			"--keystore", dir,
+			inputFile,
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		keysFile := filepath.Join(dir, "my-tunnel.keys")
+		if _, statErr := os.Stat(keysFile); os.IsNotExist(statErr) {
+			t.Errorf("expected keys file %q to be created", keysFile)
+		}
+	})
+
+	t.Run("--dry-run --sam prints SAM options without writing keys file", func(t *testing.T) {
+		dir := t.TempDir()
+		inputFile := filepath.Join(dir, "tunnel.yaml")
+		if err := os.WriteFile(inputFile, []byte(yamlContent), 0644); err != nil {
+			t.Fatalf("failed to create test file: %v", err)
+		}
+
+		app := makeSAMApp()
+		err := app.Run([]string{
+			"go-i2ptunnel-config",
+			"--sam",
+			"--dry-run",
+			"--keystore", dir,
+			inputFile,
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		// No keys file should be created in dry-run mode
+		keysFile := filepath.Join(dir, "my-tunnel.keys")
+		if _, statErr := os.Stat(keysFile); !os.IsNotExist(statErr) {
+			t.Errorf("--dry-run --sam must not create a keys file, but %q was found", keysFile)
+		}
+	})
+}
+
+// makeSplitApp builds a cli.App with --split and --list-tunnels flags registered.
+func makeSplitApp() *cli.App {
+	return &cli.App{
+		Name: "go-i2ptunnel-config",
+		Flags: []cli.Flag{
+			&cli.StringFlag{Name: "in-format"},
+			&cli.StringFlag{Name: "out-format", Value: "yaml"},
+			&cli.BoolFlag{Name: "dry-run"},
+			&cli.BoolFlag{Name: "strict"},
+			&cli.BoolFlag{Name: "split"},
+			&cli.BoolFlag{Name: "list-tunnels"},
+		},
+		Action: ConvertCommand,
+	}
+}
+
+// TestConvertCommand_SplitFlag verifies that --split produces one file per tunnel.
+func TestConvertCommand_SplitFlag(t *testing.T) {
+	iniContent := "[TunnelA]\ntype = httpclient\nhost = 127.0.0.1\nport = 4444\n\n" +
+		"[TunnelB]\ntype = httpclient\nhost = 127.0.0.1\nport = 5555\n\n" +
+		"[TunnelC]\ntype = httpclient\nhost = 127.0.0.1\nport = 6666\n"
+
+	t.Run("--split 3-section INI produces 3 yaml files", func(t *testing.T) {
+		dir := t.TempDir()
+		inputFile := filepath.Join(dir, "tunnels.conf")
+		if err := os.WriteFile(inputFile, []byte(iniContent), 0644); err != nil {
+			t.Fatalf("failed to create test file: %v", err)
+		}
+
+		originalWd, _ := os.Getwd()
+		defer os.Chdir(originalWd)
+		os.Chdir(dir)
+
+		app := makeSplitApp()
+		err := app.Run([]string{"go-i2ptunnel-config", "--split", inputFile})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		for _, name := range []string{"TunnelA.yaml", "TunnelB.yaml", "TunnelC.yaml"} {
+			if _, statErr := os.Stat(filepath.Join(dir, name)); os.IsNotExist(statErr) {
+				t.Errorf("expected output file %q was not created", name)
+			}
+		}
+	})
+
+	t.Run("--split --dry-run prints tunnels without writing files", func(t *testing.T) {
+		dir := t.TempDir()
+		inputFile := filepath.Join(dir, "tunnels.conf")
+		if err := os.WriteFile(inputFile, []byte(iniContent), 0644); err != nil {
+			t.Fatalf("failed to create test file: %v", err)
+		}
+
+		originalWd, _ := os.Getwd()
+		defer os.Chdir(originalWd)
+		os.Chdir(dir)
+
+		app := makeSplitApp()
+		err := app.Run([]string{"go-i2ptunnel-config", "--split", "--dry-run", inputFile})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		matches, _ := filepath.Glob(filepath.Join(dir, "*.yaml"))
+		if len(matches) > 0 {
+			t.Errorf("--dry-run --split must not write files, found: %v", matches)
+		}
+	})
+
+	t.Run("--list-tunnels prints names without conversion", func(t *testing.T) {
+		dir := t.TempDir()
+		inputFile := filepath.Join(dir, "tunnels.conf")
+		if err := os.WriteFile(inputFile, []byte(iniContent), 0644); err != nil {
+			t.Fatalf("failed to create test file: %v", err)
+		}
+
+		app := makeSplitApp()
+		err := app.Run([]string{"go-i2ptunnel-config", "--list-tunnels", inputFile})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		// Ensure no output files were written
+		matches, _ := filepath.Glob(filepath.Join(dir, "*.yaml"))
+		if len(matches) > 0 {
+			t.Errorf("--list-tunnels must not write files, found: %v", matches)
+		}
+	})
+}
+
+// makeStdinApp builds a cli.App with stdin-related flags registered.
+func makeStdinApp() *cli.App {
+	return &cli.App{
+		Name: "go-i2ptunnel-config",
+		Flags: []cli.Flag{
+			&cli.StringFlag{Name: "in-format"},
+			&cli.StringFlag{Name: "out-format", Value: "yaml"},
+			&cli.StringFlag{Name: "output", Aliases: []string{"o"}},
+			&cli.BoolFlag{Name: "validate"},
+			&cli.BoolFlag{Name: "strict"},
+			&cli.BoolFlag{Name: "dry-run"},
+			&cli.BoolFlag{Name: "batch"},
+			&cli.BoolFlag{Name: "sam"},
+			&cli.StringFlag{Name: "keystore"},
+			&cli.BoolFlag{Name: "split"},
+			&cli.BoolFlag{Name: "list-tunnels"},
+		},
+		Action: ConvertCommand,
+	}
+}
+
+// TestConvertCommand_StdinMissingFormat verifies that "-" without --in-format returns
+// the expected actionable error.
+func TestConvertCommand_StdinMissingFormat(t *testing.T) {
+	app := makeStdinApp()
+	err := app.Run([]string{"go-i2ptunnel-config", "-"})
+	if err == nil {
+		t.Fatal("expected error when --in-format is absent for stdin, got nil")
+	}
+	want := "reading from stdin requires --in-format"
+	if err.Error() != want {
+		t.Errorf("error = %q, want %q", err.Error(), want)
+	}
+}
+
+// TestConvertCommand_StdinMissingOutput verifies that "-" in non-dry-run mode without
+// --output returns the expected actionable error.
+func TestConvertCommand_StdinMissingOutput(t *testing.T) {
+	// Replace os.Stdin temporarily with a pipe that provides real content.
+	pr, pw, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("pipe: %v", err)
+	}
+	propertiesInput := "tunnel.0.name=myTunnel\ntunnel.0.type=httpclient\ntunnel.0.host=127.0.0.1\ntunnel.0.listenPort=4444\n"
+	go func() {
+		pw.WriteString(propertiesInput)
+		pw.Close()
+	}()
+	origStdin := os.Stdin
+	os.Stdin = pr
+	t.Cleanup(func() { os.Stdin = origStdin; pr.Close() })
+
+	app := makeStdinApp()
+	runErr := app.Run([]string{"go-i2ptunnel-config", "--in-format", "properties", "-"})
+	if runErr == nil {
+		t.Fatal("expected error when --output is absent for stdin (non-dry-run), got nil")
+	}
+	want := "reading from stdin requires --output when not using --dry-run"
+	if runErr.Error() != want {
+		t.Errorf("error = %q, want %q", runErr.Error(), want)
+	}
+}
+
+// TestConvertCommand_StdinDryRun verifies that piping content through "-" with
+// --dry-run and --in-format succeeds without writing any files.
+func TestConvertCommand_StdinDryRun(t *testing.T) {
+	dir := t.TempDir()
+
+	pr, pw, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("pipe: %v", err)
+	}
+	propertiesInput := "tunnel.0.name=myTunnel\ntunnel.0.type=httpclient\ntunnel.0.host=127.0.0.1\ntunnel.0.listenPort=4444\n"
+	go func() {
+		pw.WriteString(propertiesInput)
+		pw.Close()
+	}()
+	origStdin := os.Stdin
+	os.Stdin = pr
+	t.Cleanup(func() { os.Stdin = origStdin; pr.Close() })
+
+	app := makeStdinApp()
+	runErr := app.Run([]string{
+		"go-i2ptunnel-config",
+		"--dry-run",
+		"--in-format", "properties",
+		"-",
+	})
+	if runErr != nil {
+		t.Fatalf("unexpected error: %v", runErr)
+	}
+
+	// No files should be written in dry-run mode.
+	matches, _ := filepath.Glob(filepath.Join(dir, "*.yaml"))
+	if len(matches) > 0 {
+		t.Errorf("dry-run must not write files, found: %v", matches)
+	}
 }

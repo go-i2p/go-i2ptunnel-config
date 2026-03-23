@@ -643,3 +643,124 @@ func contains(s, substr string) bool {
 			return false
 		}()))
 }
+
+// TestValidateINIFormat exercises validateINIFormat strict-mode branches.
+func TestValidateINIFormat(t *testing.T) {
+	tests := []struct {
+		name      string
+		config    *TunnelConfig
+		strict    bool
+		wantError bool
+		errorText string
+	}{
+		{
+			name:      "valid name non-strict",
+			config:    &TunnelConfig{Name: "MyTunnel", Type: "httpclient", Port: 4444},
+			strict:    false,
+			wantError: false,
+		},
+		{
+			name:      "valid name strict",
+			config:    &TunnelConfig{Name: "MyTunnel", Type: "httpclient", Port: 4444},
+			strict:    true,
+			wantError: false,
+		},
+		{
+			name:      "name with bracket chars strict",
+			config:    &TunnelConfig{Name: "[BadName]", Type: "httpclient", Port: 4444},
+			strict:    true,
+			wantError: true,
+			errorText: "characters that may cause issues in INI format",
+		},
+		{
+			name:      "name with bracket chars non-strict is ok",
+			config:    &TunnelConfig{Name: "[BadName]", Type: "httpclient", Port: 4444},
+			strict:    false,
+			wantError: false,
+		},
+		{
+			name:      "keys=transient (no persistent key required) non-strict",
+			config:    &TunnelConfig{Name: "transientTunnel", Type: "httpclient", Port: 4444, PersistentKey: false},
+			strict:    false,
+			wantError: false,
+		},
+		{
+			name:      "keys=transient strict mode",
+			config:    &TunnelConfig{Name: "transientTunnel", Type: "httpclient", Port: 4444, PersistentKey: false},
+			strict:    true,
+			wantError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := NewValidationContext(tt.strict, "ini")
+			err := ctx.validateINIFormat(tt.config)
+			if tt.wantError && err == nil {
+				t.Errorf("expected error containing %q, got nil", tt.errorText)
+			} else if !tt.wantError && err != nil {
+				t.Errorf("unexpected error: %v", err)
+			} else if tt.wantError && err != nil && !contains(err.Error(), tt.errorText) {
+				t.Errorf("expected error containing %q, got: %v", tt.errorText, err)
+			}
+		})
+	}
+}
+
+// TestValidateYAMLFormat exercises validateYAMLFormat strict-mode branches.
+func TestValidateYAMLFormat(t *testing.T) {
+	tests := []struct {
+		name      string
+		config    *TunnelConfig
+		strict    bool
+		wantError bool
+		errorText string
+	}{
+		{
+			name:      "valid name non-strict",
+			config:    &TunnelConfig{Name: "MyTunnel", Type: "httpclient", Port: 4444},
+			strict:    false,
+			wantError: false,
+		},
+		{
+			name:      "valid name strict",
+			config:    &TunnelConfig{Name: "MyTunnel", Type: "httpclient", Port: 4444},
+			strict:    true,
+			wantError: false,
+		},
+		{
+			name:      "leading space strict",
+			config:    &TunnelConfig{Name: " LeadingSpace", Type: "httpclient", Port: 4444},
+			strict:    true,
+			wantError: true,
+			errorText: "leading or trailing spaces",
+		},
+		{
+			name:      "trailing space strict",
+			config:    &TunnelConfig{Name: "TrailingSpace ", Type: "httpclient", Port: 4444},
+			strict:    true,
+			wantError: true,
+			errorText: "leading or trailing spaces",
+		},
+		{
+			name:      "leading space non-strict is ok",
+			config:    &TunnelConfig{Name: " LeadingSpace", Type: "httpclient", Port: 4444},
+			strict:    false,
+			wantError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := NewValidationContext(tt.strict, "yaml")
+			err := ctx.validateYAMLFormat(tt.config)
+			if tt.wantError && err == nil {
+				t.Errorf("expected error containing %q, got nil", tt.errorText)
+			} else if !tt.wantError && err != nil {
+				t.Errorf("unexpected error: %v", err)
+			} else if tt.wantError && err != nil && !contains(err.Error(), tt.errorText) {
+				t.Errorf("expected error containing %q, got: %v", tt.errorText, err)
+			}
+		})
+	}
+}

@@ -113,7 +113,7 @@ For more information, visit: https://github.com/go-i2p/go-i2ptunnel-config`,
 			&cli.StringFlag{
 				Name:    "in-format",
 				Aliases: []string{"if"},
-				Usage:   "Override input format detection (properties|ini|yaml)",
+				Usage:   "Override input format detection (properties|ini|yaml); required when reading from stdin (\"-\")",
 			},
 			&cli.StringFlag{
 				Name:    "out-format",
@@ -141,6 +141,22 @@ For more information, visit: https://github.com/go-i2p/go-i2ptunnel-config`,
 			&cli.BoolFlag{
 				Name:  "batch",
 				Usage: "Process multiple files using glob patterns (e.g., \"*.config\")",
+			},
+			&cli.BoolFlag{
+				Name:  "sam",
+				Usage: "Generate or load SAM I2P keys; creates a .keys file in --keystore directory",
+			},
+			&cli.StringFlag{
+				Name:  "keystore",
+				Usage: "Directory for SAM .keys files (default: current working directory)",
+			},
+			&cli.BoolFlag{
+				Name:  "split",
+				Usage: "Split a multi-tunnel file, writing one output file per tunnel",
+			},
+			&cli.BoolFlag{
+				Name:  "list-tunnels",
+				Usage: "List all tunnel names in a multi-tunnel file without converting",
 			},
 		},
 		Action: i2pconv.ConvertCommand,

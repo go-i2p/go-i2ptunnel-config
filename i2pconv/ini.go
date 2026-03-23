@@ -20,6 +20,43 @@ func countINISections(input []byte) int {
 	return count
 }
 
+// splitINITunnels returns one TunnelConfig per [section] found in input.
+// Each section's lines are fed to parseINI so all existing parsing logic applies.
+func (c *Converter) splitINITunnels(input []byte) ([]*TunnelConfig, error) {
+	var sections [][]string
+	var current []string
+	for _, line := range strings.Split(string(input), "\n") {
+		trimmed := strings.TrimSpace(line)
+		isSection := strings.HasPrefix(trimmed, "[") && strings.HasSuffix(trimmed, "]") && len(trimmed) > 2
+		if isSection && len(current) > 0 {
+			sections = append(sections, current)
+			current = nil
+		}
+		if len(current) > 0 || isSection {
+			current = append(current, line)
+		}
+	}
+	if len(current) > 0 {
+		sections = append(sections, current)
+	}
+	if len(sections) == 0 {
+		cfg, err := c.parseINI(input)
+		if err != nil {
+			return nil, err
+		}
+		return []*TunnelConfig{cfg}, nil
+	}
+	configs := make([]*TunnelConfig, 0, len(sections))
+	for _, sec := range sections {
+		cfg, err := c.parseINI([]byte(strings.Join(sec, "\n")))
+		if err != nil {
+			return nil, err
+		}
+		configs = append(configs, cfg)
+	}
+	return configs, nil
+}
+
 // parseINIValue converts an INI value string to appropriate Go type
 // Similar to parseValue in properties.go but adapted for i2pd conventions
 func parseINIValue(s string) interface{} {

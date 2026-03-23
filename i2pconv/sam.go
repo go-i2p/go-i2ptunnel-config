@@ -9,10 +9,11 @@ import (
 	"github.com/go-i2p/i2pkeys"
 )
 
-// SAMTunnel returns the I2P keys and SAM options for this tunnel configuration.
-// If PersistentKey is true, keys will be loaded from or stored to a SAMv3 compatible file.
-// The keys file is named "{tunnel-name}.keys" in the current working directory.
-func (c *TunnelConfig) SAMTunnel() (*i2pkeys.I2PKeys, []string, error) {
+// SAMTunnelAt returns the I2P keys and SAM options for this tunnel configuration,
+// storing any persistent key file in keystore. If keystore is empty the current
+// working directory is used.
+// If PersistentKey is true, keys will be loaded from or created in keystore.
+func (c *TunnelConfig) SAMTunnelAt(keystore string) (*i2pkeys.I2PKeys, []string, error) {
 	var keys *i2pkeys.I2PKeys
 
 	if c.PersistentKey {
@@ -20,14 +21,17 @@ func (c *TunnelConfig) SAMTunnel() (*i2pkeys.I2PKeys, []string, error) {
 			return nil, nil, fmt.Errorf("tunnel name is required for persistent keys")
 		}
 
-		// Get default I2P keystore path
-		keystore, err := os.Getwd()
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to get working directory: %w", err)
+		ks := keystore
+		if ks == "" {
+			var err error
+			ks, err = os.Getwd()
+			if err != nil {
+				return nil, nil, fmt.Errorf("failed to get working directory: %w", err)
+			}
 		}
 
 		// Load or create keys for this tunnel
-		keypath := filepath.Join(keystore, c.Name+".keys")
+		keypath := filepath.Join(ks, c.Name+".keys")
 		loadedKeys, err := i2pkeys.LoadKeys(keypath)
 		if err == nil {
 			keys = &loadedKeys
@@ -79,6 +83,13 @@ func (c *TunnelConfig) SAMTunnel() (*i2pkeys.I2PKeys, []string, error) {
 	}
 
 	return keys, opts, nil
+}
+
+// SAMTunnel returns the I2P keys and SAM options for this tunnel configuration.
+// If PersistentKey is true, keys will be loaded from or stored to a SAMv3 compatible file
+// in the current working directory. Use SAMTunnelAt to specify a custom keystore directory.
+func (c *TunnelConfig) SAMTunnel() (*i2pkeys.I2PKeys, []string, error) {
+	return c.SAMTunnelAt("")
 }
 
 // hasOption reports whether any element in opts starts with prefix.
