@@ -6,6 +6,31 @@ import (
 	"strings"
 )
 
+// isClientTunnelType returns true when t names a tunnel type that acts as a
+// client (outbound) rather than a server (inbound).  For client types the
+// i2pd "address" key is the local bind address, not the remote destination.
+func isClientTunnelType(t string) bool {
+	normalized := NormalizeTypeName(t)
+	switch normalized {
+	case string(TunnelTypeClient), string(TunnelTypeHTTPClient), string(TunnelTypeSOCKS),
+		string(TunnelTypeIRCClient), string(TunnelTypeStreamClient):
+		return true
+	}
+	return false
+}
+
+// looksLikeI2PDestination returns true when s appears to be an I2P
+// destination – either a .i2p / .b32.i2p hostname or a long Base64 blob.
+// Bare IPv4/IPv6 addresses and plain hostnames return false.
+func looksLikeI2PDestination(s string) bool {
+	lower := strings.ToLower(s)
+	if strings.HasSuffix(lower, ".i2p") || strings.HasSuffix(lower, ".b32.i2p") {
+		return true
+	}
+	// Raw Base64 destinations are at least 516 characters long.
+	return len(s) >= 516
+}
+
 // countINISections counts the number of section headers ([name]) in INI input.
 // Used to detect multi-tunnel files and warn the user when only the first
 // section is converted.
@@ -195,6 +220,15 @@ func (c *Converter) parseINI(input []byte) (*TunnelConfig, error) {
 
 		// Parse key-value pair with i2pd-specific handling
 		c.parseINIKeyValue(key, value, config)
+	}
+
+	// Second-pass: for client tunnels, i2pd's "address" field is the local
+	// bind address (analogous to host/interface), not the remote destination.
+	// If we stored it as Target but the type is a known client type and the
+	// value looks like a bare host/IP rather than an I2P destination, move it.
+	if isClientTunnelType(config.Type) && config.Interface == "" && config.Target != "" && !looksLikeI2PDestination(config.Target) {
+		config.Interface = config.Target
+		config.Target = ""
 	}
 
 	return config, nil

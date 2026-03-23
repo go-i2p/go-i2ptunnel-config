@@ -192,24 +192,7 @@ func processSingleFile(inputFile, outputFile, inputFormat, outputFormat string, 
 		return fmt.Errorf("failed to parse %s input from '%s': %w", inputFormat, inputFile, err)
 	}
 
-	// Warn when the input contains multiple tunnel definitions but only the first is converted.
-	switch inputFormat {
-	case "ini":
-		if n := countINISections(inputData); n > 1 {
-			fmt.Fprintf(os.Stderr, "⚠ Input '%s' contains %d tunnels; only '%s' was converted. Use --batch to process each file individually.\n",
-				inputFile, n, config.Name)
-		}
-	case "yaml":
-		if n := countYAMLTunnels(inputData); n > 1 {
-			fmt.Fprintf(os.Stderr, "⚠ Input '%s' contains %d tunnels; only '%s' was converted. Use --batch to process each file individually.\n",
-				inputFile, n, config.Name)
-		}
-	case "properties":
-		if n := countPropertiesTunnels(inputData); n > 1 {
-			fmt.Fprintf(os.Stderr, "⚠ Input '%s' contains %d tunnels; only '%s' was converted. Use --batch to process each file individually.\n",
-				inputFile, n, config.Name)
-		}
-	}
+	warnIfMultiTunnel(inputData, inputFormat, inputFile, config.Name)
 
 	// Validate configuration
 	if err := converter.validateWithFormat(config, inputFormat); err != nil {
@@ -227,24 +210,8 @@ func processSingleFile(inputFile, outputFile, inputFormat, outputFormat string, 
 		return fmt.Errorf("failed to generate %s output: %w", outputFormat, err)
 	}
 
-	// Handle output - either print to console or write to file
 	if dryRun {
-		fmt.Printf("# Converted '%s' from %s to %s format:\n", inputFile, inputFormat, outputFormat)
-		fmt.Println(string(outputData))
-		// SAM dry-run: print options without writing key files
-		if sam || config.PersistentKey {
-			cfgCopy := *config
-			cfgCopy.PersistentKey = false
-			_, opts, samErr := cfgCopy.SAMTunnelAt("")
-			if samErr != nil {
-				return fmt.Errorf("failed to compute SAM options for '%s': %w", inputFile, samErr)
-			}
-			fmt.Printf("# SAM options for '%s':\n", config.Name)
-			for _, opt := range opts {
-				fmt.Printf("  %s\n", opt)
-			}
-		}
-		return nil
+		return printDryRunOutput(config, outputData, inputFile, inputFormat, outputFormat, sam)
 	}
 
 	// Determine output file name if not specified
@@ -257,21 +224,64 @@ func processSingleFile(inputFile, outputFile, inputFormat, outputFormat string, 
 		return fmt.Errorf("failed to write output file '%s': %w", outputFile, err)
 	}
 
-	// Generate or load SAM keys when requested or when tunnel has persistentKey set
+	return applyOrReportSAMKeys(config, inputFile, keystore, sam)
+}
+
+// warnIfMultiTunnel prints a warning to stderr when the input contains more than
+// one tunnel definition but only the first will be converted.
+func warnIfMultiTunnel(inputData []byte, format, inputFile, tunnelName string) {
+	var n int
+	switch format {
+	case "ini":
+		n = countINISections(inputData)
+	case "yaml":
+		n = countYAMLTunnels(inputData)
+	case "properties":
+		n = countPropertiesTunnels(inputData)
+	}
+	if n > 1 {
+		fmt.Fprintf(os.Stderr, "⚠ Input '%s' contains %d tunnels; only '%s' was converted. Use --batch to process each file individually.\n",
+			inputFile, n, tunnelName)
+	}
+}
+
+// printDryRunOutput prints converted output to stdout and, when SAM keys are
+// relevant, prints the SAM options without writing any key files.
+func printDryRunOutput(config *TunnelConfig, outputData []byte, inputFile, inputFormat, outputFormat string, sam bool) error {
+	fmt.Printf("# Converted '%s' from %s to %s format:\n", inputFile, inputFormat, outputFormat)
+	fmt.Println(string(outputData))
 	if sam || config.PersistentKey {
-		_, _, samErr := config.SAMTunnelAt(keystore)
+		cfgCopy := *config
+		cfgCopy.PersistentKey = false
+		_, opts, samErr := cfgCopy.SAMTunnelAt("")
 		if samErr != nil {
-			return fmt.Errorf("failed to generate SAM keys for '%s': %w", inputFile, samErr)
+			return fmt.Errorf("failed to compute SAM options for '%s': %w", inputFile, samErr)
 		}
-		if config.PersistentKey && config.Name != "" {
-			ks := keystore
-			if ks == "" {
-				ks, _ = os.Getwd()
-			}
-			fmt.Fprintf(os.Stderr, "\u2139 SAM keys: %s\n", filepath.Join(ks, config.Name+".keys"))
+		fmt.Printf("# SAM options for '%s':\n", config.Name)
+		for _, opt := range opts {
+			fmt.Printf("  %s\n", opt)
 		}
 	}
+	return nil
+}
 
+// applyOrReportSAMKeys generates or loads SAM keys for the tunnel when requested
+// or when the tunnel has persistentKey set, and reports the key file path.
+func applyOrReportSAMKeys(config *TunnelConfig, inputFile, keystore string, sam bool) error {
+	if !sam && !config.PersistentKey {
+		return nil
+	}
+	_, _, samErr := config.SAMTunnelAt(keystore)
+	if samErr != nil {
+		return fmt.Errorf("failed to generate SAM keys for '%s': %w", inputFile, samErr)
+	}
+	if config.PersistentKey && config.Name != "" {
+		ks := keystore
+		if ks == "" {
+			ks, _ = os.Getwd()
+		}
+		fmt.Fprintf(os.Stderr, "ℹ SAM keys: %s\n", filepath.Join(ks, config.Name+".keys"))
+	}
 	return nil
 }
 

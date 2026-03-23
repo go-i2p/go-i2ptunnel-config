@@ -1,0 +1,27 @@
+linters:
+  enable:
+    - errcheck
+    - govet
+    - staticcheck
+    - revive
+    - gocyclo
+
+linters-settings:
+  gocyclo:
+    min-complexity: 30
+
+issues:
+  exclude-rules:
+    # Test files: unchecked errors in setup/cleanup helpers are acceptable.
+    - path: "_test\\.go"
+      linters:
+        - errcheck
+    # Test helper functions and table-driven tests legitimately have high
+    # cyclomatic complexity; exclude them from the gocyclo check.
+    - path: "_test\\.go"
+      linters:
+        - gocyclo
+    # Unused parameters inside anonymous check functions in table-driven tests.
+    - path: "_test\\.go"
+      linters:
+        - revive
