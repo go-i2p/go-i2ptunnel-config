@@ -872,11 +872,8 @@ func TestProcessBatch(t *testing.T) {
 		// dry-run so valid files don't produce output files
 		ctx := makeBatchContext("yaml", false, true, false)
 		results, err := ProcessBatch(filepath.Join(dir, "*.properties"), ctx)
-		if err == nil {
-			t.Fatal("expected error for mixed results but got none")
-		}
-		if !strings.Contains(err.Error(), "failed processing") {
-			t.Errorf("expected 'failed processing' in error, got: %q", err.Error())
+		if err != nil {
+			t.Fatalf("unexpected fatal error: %v", err)
 		}
 
 		successCount, failureCount := 0, 0
@@ -892,6 +889,14 @@ func TestProcessBatch(t *testing.T) {
 		}
 		if successCount == 0 {
 			t.Error("expected at least one success")
+		}
+
+		// reportBatchResults should return an error describing the failure count
+		reportErr := reportBatchResults(results, false, true)
+		if reportErr == nil {
+			t.Error("expected reportBatchResults to return error for partial failures")
+		} else if !strings.Contains(reportErr.Error(), "failed processing") {
+			t.Errorf("expected 'failed processing' in error, got: %q", reportErr.Error())
 		}
 	})
 

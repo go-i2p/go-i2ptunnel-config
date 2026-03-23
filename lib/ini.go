@@ -6,6 +6,20 @@ import (
 	"strings"
 )
 
+// countINISections counts the number of section headers ([name]) in INI input.
+// Used to detect multi-tunnel files and warn the user when only the first
+// section is converted.
+func countINISections(input []byte) int {
+	count := 0
+	for _, line := range strings.Split(string(input), "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") && len(line) > 2 {
+			count++
+		}
+	}
+	return count
+}
+
 // parseINIValue converts an INI value string to appropriate Go type
 // Similar to parseValue in properties.go but adapted for i2pd conventions
 func parseINIValue(s string) interface{} {

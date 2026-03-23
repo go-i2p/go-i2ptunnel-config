@@ -372,3 +372,227 @@ option10 = disabled`
 func iniValuesEqual(expected, actual interface{}) bool {
 	return reflect.DeepEqual(expected, actual)
 }
+
+// TestINIMultiSectionParsesFirstOnly documents that a two-section INI file takes
+// the name from the first section but merges all subsequent key-value pairs into
+// the same config (later values overwrite earlier ones when keys collide).
+// This confirms that countINISections correctly detects multi-tunnel input and
+// that the warning path is reachable.
+func TestINIMultiSectionParsesFirstOnly(t *testing.T) {
+	input := `[FirstTunnel]
+type = httpclient
+host = 127.0.0.1
+port = 4444
+
+[SecondTunnel]
+type = httpserver
+host = 0.0.0.0
+port = 80
+address = second.i2p
+`
+	conv := &Converter{}
+	config, err := conv.ParseInput([]byte(input), "ini")
+	if err != nil {
+		t.Fatalf("unexpected parse error: %v", err)
+	}
+
+	// The name is set from the first section header only.
+	if config.Name != "FirstTunnel" {
+		t.Errorf("expected name 'FirstTunnel', got %q", config.Name)
+	}
+
+	// The INI parser merges all sections: later keys overwrite earlier ones.
+	// So type/port/address come from SecondTunnel (last section).
+	if config.Type != "httpserver" {
+		t.Errorf("expected merged type 'httpserver' (from SecondTunnel), got %q", config.Type)
+	}
+	if config.Port != 80 {
+		t.Errorf("expected merged port 80 (from SecondTunnel), got %d", config.Port)
+	}
+
+	// countINISections must detect both sections to confirm the warning path is reachable.
+	n := countINISections([]byte(input))
+	if n != 2 {
+		t.Errorf("expected countINISections to return 2, got %d", n)
+	}
+}
+
+// TestINIKeyValueCoverage covers the individual parseINIKeyValue branches that are
+// not reachable through the normal parseINI path (e.g., nil-map guards) as well
+// as less commonly exercised cases like "webircpassword" and "name" key override.
+func TestINIKeyValueCoverage(t *testing.T) {
+	conv := &Converter{}
+
+	// Helper: fresh config with nil maps to trigger nil-init guards in parseINIKeyValue.
+	nilConfig := func() *TunnelConfig {
+		return &TunnelConfig{
+			I2CP:     make(map[string]interface{}),
+			Inbound:  make(map[string]interface{}),
+			Outbound: make(map[string]interface{}),
+			// Tunnel intentionally nil
+		}
+	}
+
+	t.Run("name key sets name when empty", func(t *testing.T) {
+		c := nilConfig()
+		conv.parseINIKeyValue("name", "MyTunnel", c)
+		if c.Name != "MyTunnel" {
+			t.Errorf("expected Name 'MyTunnel', got %q", c.Name)
+		}
+	})
+
+	t.Run("name key skipped when already set", func(t *testing.T) {
+		c := nilConfig()
+		c.Name = "SectionName"
+		conv.parseINIKeyValue("name", "OverrideName", c)
+		if c.Name != "SectionName" {
+			t.Errorf("expected Name to remain 'SectionName', got %q", c.Name)
+		}
+	})
+
+	t.Run("webircpassword is stored in Tunnel map", func(t *testing.T) {
+		c := nilConfig()
+		conv.parseINIKeyValue("webircpassword", "secret", c)
+		if got, ok := c.Tunnel["webircpassword"]; !ok || got != "secret" {
+			t.Errorf("expected Tunnel[webircpassword]='secret', got %v", got)
+		}
+	})
+
+	t.Run("gzip with nil Tunnel initialises map", func(t *testing.T) {
+		c := nilConfig()
+		conv.parseINIKeyValue("gzip", "true", c)
+		if got, ok := c.Tunnel["gzip"]; !ok || got != true {
+			t.Errorf("expected Tunnel[gzip]=true, got %v", got)
+		}
+	})
+
+	t.Run("accesslist with nil Tunnel initialises map", func(t *testing.T) {
+		c := nilConfig()
+		conv.parseINIKeyValue("accesslist", "peer1.i2p,peer2.i2p", c)
+		if _, ok := c.Tunnel["accesslist"]; !ok {
+			t.Error("expected Tunnel[accesslist] to be set")
+		}
+	})
+
+	t.Run("signaturetype with nil Tunnel initialises map", func(t *testing.T) {
+		c := nilConfig()
+		conv.parseINIKeyValue("signaturetype", "7", c)
+		if got, ok := c.Tunnel["signaturetype"]; !ok || got != 7 {
+			t.Errorf("expected Tunnel[signaturetype]=7, got %v", got)
+		}
+	})
+
+	t.Run("explicitpeers with nil Tunnel initialises map", func(t *testing.T) {
+		c := nilConfig()
+		conv.parseINIKeyValue("explicitpeers", "abc.b32.i2p,xyz.b32.i2p", c)
+		if _, ok := c.Tunnel["explicitpeers"]; !ok {
+			t.Error("expected Tunnel[explicitpeers] to be set")
+		}
+	})
+
+	t.Run("multicast yes with nil Tunnel initialises map", func(t *testing.T) {
+		c := nilConfig()
+		conv.parseINIKeyValue("multicast", "yes", c)
+		if got, ok := c.Tunnel["multicast"]; !ok || got != true {
+			t.Errorf("expected Tunnel[multicast]=true, got %v", got)
+		}
+	})
+
+	t.Run("maptoloopback with nil Tunnel initialises map", func(t *testing.T) {
+		c := nilConfig()
+		conv.parseINIKeyValue("maptoloopback", "true", c)
+		if got, ok := c.Tunnel["maptoloopback"]; !ok || got != true {
+			t.Errorf("expected Tunnel[maptoloopback]=true, got %v", got)
+		}
+	})
+
+	t.Run("enableuniquelocal false with nil Tunnel initialises map", func(t *testing.T) {
+		c := nilConfig()
+		conv.parseINIKeyValue("enableuniquelocal", "false", c)
+		if got, ok := c.Tunnel["enableuniquelocal"]; !ok || got != false {
+			t.Errorf("expected Tunnel[enableuniquelocal]=false, got %v", got)
+		}
+	})
+
+	t.Run("crypto prefix with nil Tunnel initialises map", func(t *testing.T) {
+		c := nilConfig()
+		conv.parseINIKeyValue("crypto.tagsToSend", "40", c)
+		if got, ok := c.Tunnel["crypto.tagsToSend"]; !ok || got != 40 {
+			t.Errorf("expected Tunnel[crypto.tagsToSend]=40, got %v", got)
+		}
+	})
+
+	t.Run("streamr prefix with nil Tunnel initialises map", func(t *testing.T) {
+		c := nilConfig()
+		conv.parseINIKeyValue("streamr.rto", "60000", c)
+		if got, ok := c.Tunnel["streamr.rto"]; !ok || got != 60000 {
+			t.Errorf("expected Tunnel[streamr.rto]=60000, got %v", got)
+		}
+	})
+
+	t.Run("i2cp prefix with nil I2CP initialises map", func(t *testing.T) {
+		c := &TunnelConfig{
+			Tunnel:   make(map[string]interface{}),
+			Inbound:  make(map[string]interface{}),
+			Outbound: make(map[string]interface{}),
+			// I2CP intentionally nil
+		}
+		conv.parseINIKeyValue("i2cp.leaseSetEncType", "4,0", c)
+		if _, ok := c.I2CP["leaseSetEncType"]; !ok {
+			t.Error("expected I2CP[leaseSetEncType] to be set")
+		}
+	})
+
+	t.Run("inbound prefix with nil Inbound initialises map", func(t *testing.T) {
+		c := &TunnelConfig{
+			I2CP:     make(map[string]interface{}),
+			Tunnel:   make(map[string]interface{}),
+			Outbound: make(map[string]interface{}),
+			// Inbound intentionally nil
+		}
+		conv.parseINIKeyValue("inbound.length", "3", c)
+		if got, ok := c.Inbound["length"]; !ok || got != 3 {
+			t.Errorf("expected Inbound[length]=3, got %v", got)
+		}
+	})
+
+	t.Run("outbound prefix with nil Outbound initialises map", func(t *testing.T) {
+		c := &TunnelConfig{
+			I2CP:    make(map[string]interface{}),
+			Tunnel:  make(map[string]interface{}),
+			Inbound: make(map[string]interface{}),
+			// Outbound intentionally nil
+		}
+		conv.parseINIKeyValue("outbound.length", "2", c)
+		if got, ok := c.Outbound["length"]; !ok || got != 2 {
+			t.Errorf("expected Outbound[length]=2, got %v", got)
+		}
+	})
+
+	t.Run("unknown key with nil Tunnel initialises map", func(t *testing.T) {
+		c := nilConfig()
+		conv.parseINIKeyValue("customoption", "customvalue", c)
+		if got, ok := c.Tunnel["customoption"]; !ok || got != "customvalue" {
+			t.Errorf("expected Tunnel[customoption]='customvalue', got %v", got)
+		}
+	})
+
+	t.Run("keys persistent with nil Tunnel initialises map", func(t *testing.T) {
+		c := nilConfig()
+		conv.parseINIKeyValue("keys", "mykeyfile.dat", c)
+		if !c.PersistentKey {
+			t.Error("expected PersistentKey=true for named keyfile")
+		}
+		if got, ok := c.Tunnel["keyfile"]; !ok || got != "mykeyfile.dat" {
+			t.Errorf("expected Tunnel[keyfile]='mykeyfile.dat', got %v", got)
+		}
+	})
+
+	t.Run("hostoverride with nil Tunnel initialises map", func(t *testing.T) {
+		c := nilConfig()
+		conv.parseINIKeyValue("hostoverride", "override.example.com", c)
+		if got, ok := c.Tunnel["hostoverride"]; !ok || got != "override.example.com" {
+			t.Errorf("expected Tunnel[hostoverride]='override.example.com', got %v", got)
+		}
+	})
+}

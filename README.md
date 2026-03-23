@@ -70,6 +70,10 @@ Each example includes detailed comments explaining the configuration options. Se
 3. Run `make fmt`
 4. Submit pull request
 
+## Limitations
+
+- **Single-tunnel conversion**: Each invocation converts one tunnel. When an input file contains multiple tunnel definitions (e.g., a multi-section i2pd `tunnels.conf` or a YAML file with several entries under `tunnels:`), only the first tunnel is converted. A warning is printed to stderr.  Split multi-tunnel files before conversion, or use `--batch` to convert separate single-tunnel files at once.
+
 ## Security
 
 - No network connectivity

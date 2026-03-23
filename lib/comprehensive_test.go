@@ -691,3 +691,64 @@ func TestINIFormatValidation(t *testing.T) {
 		})
 	}
 }
+
+// TestMultiTunnelFileBehaviourINI documents that parsing a two-section INI file
+// takes the name from the first section but merges key-value pairs from all sections.
+func TestMultiTunnelFileBehaviourINI(t *testing.T) {
+	input := `[Alpha]
+type = httpclient
+port = 1111
+
+[Beta]
+type = httpserver
+port = 2222
+address = beta.i2p
+`
+	conv := &Converter{}
+	config, err := conv.ParseInput([]byte(input), "ini")
+	if err != nil {
+		t.Fatalf("unexpected parse error: %v", err)
+	}
+
+	// Name comes from the first section header.
+	if config.Name != "Alpha" {
+		t.Errorf("expected name 'Alpha', got %q", config.Name)
+	}
+
+	// Later sections overwrite earlier keys; port/type come from Beta.
+	if config.Type != "httpserver" {
+		t.Errorf("expected merged type 'httpserver' (from Beta), got %q", config.Type)
+	}
+	if config.Port != 2222 {
+		t.Errorf("expected merged port 2222 (from Beta), got %d", config.Port)
+	}
+}
+
+// TestMultiTunnelFileBehaviourYAML asserts that parsing a YAML file with multiple
+// tunnels returns exactly one tunnel (documenting the single-tunnel limitation).
+func TestMultiTunnelFileBehaviourYAML(t *testing.T) {
+	input := `tunnels:
+  Alpha:
+    type: httpclient
+    port: 1111
+  Beta:
+    type: httpserver
+    port: 2222
+`
+	conv := &Converter{}
+	config, err := conv.ParseInput([]byte(input), "yaml")
+	if err != nil {
+		t.Fatalf("unexpected parse error: %v", err)
+	}
+
+	// One of the tunnels should be returned
+	if config.Name != "Alpha" && config.Name != "Beta" {
+		t.Errorf("expected tunnel name 'Alpha' or 'Beta', got %q", config.Name)
+	}
+
+	// Verify countYAMLTunnels detects both
+	n := countYAMLTunnels([]byte(input))
+	if n != 2 {
+		t.Errorf("expected countYAMLTunnels to return 2, got %d", n)
+	}
+}

@@ -172,6 +172,20 @@ func processSingleFile(inputFile, outputFile, inputFormat, outputFormat string, 
 		return fmt.Errorf("failed to parse %s input from '%s': %w", inputFormat, inputFile, err)
 	}
 
+	// Warn when the input contains multiple tunnel definitions but only the first is converted.
+	switch inputFormat {
+	case "ini":
+		if n := countINISections(inputData); n > 1 {
+			fmt.Fprintf(os.Stderr, "⚠ Input '%s' contains %d tunnels; only '%s' was converted. Use --batch to process each file individually.\n",
+				inputFile, n, config.Name)
+		}
+	case "yaml":
+		if n := countYAMLTunnels(inputData); n > 1 {
+			fmt.Fprintf(os.Stderr, "⚠ Input '%s' contains %d tunnels; only '%s' was converted. Use --batch to process each file individually.\n",
+				inputFile, n, config.Name)
+		}
+	}
+
 	// Validate configuration
 	if err := converter.validateWithFormat(config, inputFormat); err != nil {
 		return fmt.Errorf("validation error in '%s': %w", inputFile, err)

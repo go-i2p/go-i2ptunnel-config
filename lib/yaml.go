@@ -7,6 +7,21 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
+// countYAMLTunnels returns the number of tunnels defined under the top-level
+// "tunnels" key in the YAML input. Returns 0 on any parse error.
+// Used to detect multi-tunnel files and warn the user when only the first
+// tunnel is converted.
+func countYAMLTunnels(input []byte) int {
+	type wrapper struct {
+		Tunnels map[string]interface{} `yaml:"tunnels"`
+	}
+	var w wrapper
+	if err := yaml.Unmarshal(input, &w); err != nil {
+		return 0
+	}
+	return len(w.Tunnels)
+}
+
 // parseYAML parses YAML using the standard nested structure with "tunnels" map.
 // This is the go-i2p format where tunnels are defined in a "tunnels" map.
 // The parser extracts the first tunnel for single-tunnel conversion workflows.
