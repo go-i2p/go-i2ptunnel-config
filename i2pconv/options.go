@@ -5,7 +5,9 @@ import (
 	"strconv"
 )
 
-// Return the optins as a map of key-value pairs.
+// Options returns the tunnel configuration as a flat string-to-string map.
+// Nested maps (I2CP, Tunnel, Inbound, Outbound) are flattened with dot-separated
+// prefix keys (e.g., "I2CP.foo", "Tunnel.bar").
 func (t *TunnelConfig) Options() map[string]string {
 	options := make(map[string]string)
 	options["Name"] = t.Name

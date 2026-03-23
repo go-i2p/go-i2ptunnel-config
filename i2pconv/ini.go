@@ -163,10 +163,24 @@ func (c *Converter) parseINI(input []byte) (*TunnelConfig, error) {
 	return config, nil
 }
 
-// parseINIKeyValue handles individual key-value pairs with i2pd-specific mappings
+// parseINIKeyValue handles individual key-value pairs with i2pd-specific mappings.
+// It delegates to three focused helpers in order: core fields, advanced tunnel
+// fields, and prefixed/unknown fields.
 func (c *Converter) parseINIKeyValue(key, value string, config *TunnelConfig) {
+	if parseCoreINIField(key, value, config) {
+		return
+	}
+	if parseTunnelAdvancedField(key, value, config) {
+		return
+	}
+	parsePrefixedINIField(key, value, config)
+}
+
+// parseCoreINIField handles the fundamental tunnel fields: identity, network
+// address, port, target, description, and key management.
+// Returns true if the key was recognised and handled.
+func parseCoreINIField(key, value string, config *TunnelConfig) bool {
 	switch key {
-	// Core tunnel properties
 	case "name":
 		if config.Name == "" { // Don't override section name
 			config.Name = value
@@ -190,8 +204,6 @@ func (c *Converter) parseINIKeyValue(key, value string, config *TunnelConfig) {
 		config.Tunnel["hostoverride"] = value
 	case "description":
 		config.Description = value
-
-	// Key management
 	case "keys":
 		// In i2pd, keys can be a filename or "transient"
 		if strings.ToLower(value) == "transient" {
@@ -203,86 +215,72 @@ func (c *Converter) parseINIKeyValue(key, value string, config *TunnelConfig) {
 			}
 			config.Tunnel["keyfile"] = value
 		}
+	default:
+		return false
+	}
+	return true
+}
 
-	// i2pd-specific properties
+// parseTunnelAdvancedField handles i2pd-specific tunnel properties such as
+// network-level flags, access control lists, and IRC/WebIRC settings.
+// Returns true if the key was recognised and handled.
+func parseTunnelAdvancedField(key, value string, config *TunnelConfig) bool {
+	if config.Tunnel == nil {
+		config.Tunnel = make(map[string]interface{})
+	}
+	switch key {
 	case "gzip":
-		if config.Tunnel == nil {
-			config.Tunnel = make(map[string]interface{})
-		}
 		config.Tunnel["gzip"] = parseINIBooleanValue(value)
 	case "accesslist":
-		if config.Tunnel == nil {
-			config.Tunnel = make(map[string]interface{})
-		}
 		config.Tunnel["accesslist"] = parseINIValue(value)
 	case "signaturetype":
-		if config.Tunnel == nil {
-			config.Tunnel = make(map[string]interface{})
-		}
 		config.Tunnel["signaturetype"] = parseINIValue(value)
 	case "explicitpeers":
-		if config.Tunnel == nil {
-			config.Tunnel = make(map[string]interface{})
-		}
 		config.Tunnel["explicitpeers"] = parseINIValue(value)
 	case "multicast":
-		if config.Tunnel == nil {
-			config.Tunnel = make(map[string]interface{})
-		}
 		config.Tunnel["multicast"] = parseINIBooleanValue(value)
 	case "webircpassword":
-		if config.Tunnel == nil {
-			config.Tunnel = make(map[string]interface{})
-		}
 		config.Tunnel["webircpassword"] = value
 	case "maptoloopback":
-		if config.Tunnel == nil {
-			config.Tunnel = make(map[string]interface{})
-		}
 		config.Tunnel["maptoloopback"] = parseINIBooleanValue(value)
 	case "enableuniquelocal":
+		config.Tunnel["enableuniquelocal"] = parseINIBooleanValue(value)
+	default:
+		return false
+	}
+	return true
+}
+
+// parsePrefixedINIField stores options whose keys carry a recognised prefix
+// (i2cp.*, crypto.*, streamr.*, inbound.*, outbound.*) into the appropriate
+// sub-maps, and falls back to the generic Tunnel map for all other keys.
+func parsePrefixedINIField(key, value string, config *TunnelConfig) {
+	switch {
+	case strings.HasPrefix(key, "i2cp."):
+		if config.I2CP == nil {
+			config.I2CP = make(map[string]interface{})
+		}
+		config.I2CP[strings.TrimPrefix(key, "i2cp.")] = parseINIValue(value)
+	case strings.HasPrefix(key, "crypto."), strings.HasPrefix(key, "streamr."):
 		if config.Tunnel == nil {
 			config.Tunnel = make(map[string]interface{})
 		}
-		config.Tunnel["enableuniquelocal"] = parseINIBooleanValue(value)
-
-	default:
-		// Handle prefixed keys
-		if strings.HasPrefix(key, "i2cp.") {
-			if config.I2CP == nil {
-				config.I2CP = make(map[string]interface{})
-			}
-			optionKey := strings.TrimPrefix(key, "i2cp.")
-			config.I2CP[optionKey] = parseINIValue(value)
-		} else if strings.HasPrefix(key, "crypto.") {
-			if config.Tunnel == nil {
-				config.Tunnel = make(map[string]interface{})
-			}
-			config.Tunnel[key] = parseINIValue(value)
-		} else if strings.HasPrefix(key, "streamr.") {
-			if config.Tunnel == nil {
-				config.Tunnel = make(map[string]interface{})
-			}
-			config.Tunnel[key] = parseINIValue(value)
-		} else if strings.HasPrefix(key, "inbound.") {
-			if config.Inbound == nil {
-				config.Inbound = make(map[string]interface{})
-			}
-			optionKey := strings.TrimPrefix(key, "inbound.")
-			config.Inbound[optionKey] = parseINIValue(value)
-		} else if strings.HasPrefix(key, "outbound.") {
-			if config.Outbound == nil {
-				config.Outbound = make(map[string]interface{})
-			}
-			optionKey := strings.TrimPrefix(key, "outbound.")
-			config.Outbound[optionKey] = parseINIValue(value)
-		} else {
-			// Store other options in Tunnel map
-			if config.Tunnel == nil {
-				config.Tunnel = make(map[string]interface{})
-			}
-			config.Tunnel[key] = parseINIValue(value)
+		config.Tunnel[key] = parseINIValue(value)
+	case strings.HasPrefix(key, "inbound."):
+		if config.Inbound == nil {
+			config.Inbound = make(map[string]interface{})
 		}
+		config.Inbound[strings.TrimPrefix(key, "inbound.")] = parseINIValue(value)
+	case strings.HasPrefix(key, "outbound."):
+		if config.Outbound == nil {
+			config.Outbound = make(map[string]interface{})
+		}
+		config.Outbound[strings.TrimPrefix(key, "outbound.")] = parseINIValue(value)
+	default:
+		if config.Tunnel == nil {
+			config.Tunnel = make(map[string]interface{})
+		}
+		config.Tunnel[key] = parseINIValue(value)
 	}
 }
 

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/urfave/cli"
+	"github.com/urfave/cli/v2"
 )
 
 // TestGenerateOutputFilename tests the generateOutputFilename function with various inputs
@@ -352,7 +352,7 @@ listenPort=8080
 						Value: "yaml",
 					},
 					&cli.StringFlag{
-						Name: "output, o",
+						Name: "output", Aliases: []string{"o"},
 					},
 				},
 				Action: ConvertCommand,
@@ -442,7 +442,7 @@ listenPort=8080
 						Value: "yaml",
 					},
 					&cli.StringFlag{
-						Name: "output, o",
+						Name: "output", Aliases: []string{"o"},
 					},
 				},
 				Action: ConvertCommand,
@@ -947,7 +947,7 @@ func TestConvertCommandBatchIntegration(t *testing.T) {
 			Flags: []cli.Flag{
 				&cli.StringFlag{Name: "in-format"},
 				&cli.StringFlag{Name: "out-format", Value: "yaml"},
-				&cli.StringFlag{Name: "output, o"},
+				&cli.StringFlag{Name: "output", Aliases: []string{"o"}},
 				&cli.BoolFlag{Name: "validate"},
 				&cli.BoolFlag{Name: "strict"},
 				&cli.BoolFlag{Name: "dry-run"},

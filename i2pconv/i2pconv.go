@@ -46,6 +46,8 @@ type TunnelConfig struct {
 	Outbound      map[string]interface{} `yaml:"outbound,omitempty"`
 }
 
+// LoadConfig reads a tunnel configuration file from disk and parses it into
+// this TunnelConfig. The format is detected from the file extension.
 func (t *TunnelConfig) LoadConfig(path string) error {
 	conv := &Converter{}
 	data, err := os.ReadFile(path)
@@ -100,12 +102,15 @@ func (c *Converter) generateOutput(config *TunnelConfig, format string) ([]byte,
 	}
 }
 
+// validate checks the tunnel configuration using the default validation rules.
 func (c *Converter) validate(config *TunnelConfig) error {
 	// Use the comprehensive validation framework
 	validationCtx := NewValidationContext(c.strict, "")
 	return validationCtx.Validate(config)
 }
 
+// validateWithFormat checks the tunnel configuration using both generic rules
+// and rules specific to the given input format (properties, ini, or yaml).
 func (c *Converter) validateWithFormat(config *TunnelConfig, format string) error {
 	// Use the comprehensive validation framework with format-specific rules
 	validationCtx := NewValidationContext(c.strict, format)
@@ -117,6 +122,8 @@ type Converter struct {
 	strict bool
 }
 
+// Convert parses input bytes in inFormat and serialises the result as outFormat.
+// It validates the configuration between the two steps.
 func (c *Converter) Convert(input []byte, inFormat, outFormat string) ([]byte, error) {
 	config, err := c.ParseInput(input, inFormat)
 	if err != nil {
@@ -130,6 +137,8 @@ func (c *Converter) Convert(input []byte, inFormat, outFormat string) ([]byte, e
 	return c.generateOutput(config, outFormat)
 }
 
+// ParseInput parses raw configuration bytes in the given format (properties,
+// yaml, or ini) and returns the resulting TunnelConfig.
 func (c *Converter) ParseInput(input []byte, format string) (*TunnelConfig, error) {
 	switch format {
 	case "properties":
@@ -143,6 +152,9 @@ func (c *Converter) ParseInput(input []byte, format string) (*TunnelConfig, erro
 	}
 }
 
+// DetectFormat infers the configuration format from the file extension of path.
+// Recognised extensions: .properties/.prop/.config → "properties",
+// .yml/.yaml → "yaml", .ini/.conf → "ini".
 func (c *Converter) DetectFormat(path string) (string, error) {
 	ext := strings.ToLower(filepath.Ext(path))
 	if ext == ".properties" || ext == ".prop" || ext == ".config" {

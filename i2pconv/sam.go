@@ -81,6 +81,7 @@ func (c *TunnelConfig) SAMTunnel() (*i2pkeys.I2PKeys, []string, error) {
 	return keys, opts, nil
 }
 
+// hasOption reports whether any element in opts starts with prefix.
 func hasOption(opts []string, prefix string) bool {
 	for _, opt := range opts {
 		if strings.HasPrefix(opt, prefix) {

@@ -29,18 +29,22 @@ type ParseError struct {
 	Format  string   // The format being parsed (properties, ini, yaml)
 }
 
+// Error returns a formatted string describing the validation failure.
 func (e *ValidationError) Error() string {
 	return "validation: " + e.Err.Error()
 }
 
+// Unwrap returns the underlying error, enabling errors.Is / errors.As inspection.
 func (e *ValidationError) Unwrap() error {
 	return e.Err
 }
 
+// Error returns a formatted string that includes the operation name and cause.
 func (e *ConversionError) Error() string {
 	return e.Op + ": " + e.Err.Error()
 }
 
+// Unwrap returns the underlying error, enabling errors.Is / errors.As inspection.
 func (e *ConversionError) Unwrap() error {
 	return e.Err
 }

@@ -334,3 +334,43 @@ func TestSAMTunnel_LeaseSetEncTypePreserved(t *testing.T) {
 		t.Error("Default i2cp.leaseSetEncType=4,0 should not be added when custom value exists")
 	}
 }
+
+// TestSAMTunnel_ReadOnlyDirectory verifies that SAMTunnel returns an error
+// when it cannot create the key file because the working directory is read-only.
+func TestSAMTunnel_ReadOnlyDirectory(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("skipping read-only directory test when running as root")
+	}
+
+	tempDir := t.TempDir()
+
+	originalWd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get working directory: %v", err)
+	}
+	defer os.Chdir(originalWd) //nolint:errcheck
+
+	if err := os.Chdir(tempDir); err != nil {
+		t.Fatalf("Failed to change to temp directory: %v", err)
+	}
+
+	// Make directory read+execute but not writable so os.Create will fail
+	// while os.Getwd() (which needs execute) still succeeds.
+	if err := os.Chmod(tempDir, 0o555); err != nil {
+		t.Fatalf("Failed to chmod temp directory: %v", err)
+	}
+	defer os.Chmod(tempDir, 0o755) //nolint:errcheck
+
+	config := &TunnelConfig{
+		Name:          "readonly-test",
+		Type:          "client",
+		PersistentKey: true,
+	}
+
+	_, _, err = config.SAMTunnel()
+	if err == nil {
+		t.Error("Expected error when key file cannot be created in read-only directory")
+	} else if !strings.Contains(err.Error(), "failed to create key file") {
+		t.Errorf("Expected 'failed to create key file' in error, got: %v", err)
+	}
+}

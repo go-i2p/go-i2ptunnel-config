@@ -13,8 +13,8 @@ import (
 	"log"
 	"os"
 
-	i2pconv "github.com/go-i2p/go-i2ptunnel-config/lib"
-	"github.com/urfave/cli"
+	i2pconv "github.com/go-i2p/go-i2ptunnel-config/i2pconv"
+	"github.com/urfave/cli/v2"
 )
 
 // CLI implementation
@@ -111,17 +111,20 @@ For more information, visit: https://github.com/go-i2p/go-i2ptunnel-config`,
 		ArgsUsage: "<input-file> [output-file]",
 		Flags: []cli.Flag{
 			&cli.StringFlag{
-				Name:  "in-format, if",
-				Usage: "Override input format detection (properties|ini|yaml)",
+				Name:    "in-format",
+				Aliases: []string{"if"},
+				Usage:   "Override input format detection (properties|ini|yaml)",
 			},
 			&cli.StringFlag{
-				Name:  "out-format, of",
-				Usage: "Set output format: properties (Java I2P), ini (i2pd), yaml (go-i2p)",
-				Value: "yaml",
+				Name:    "out-format",
+				Aliases: []string{"of"},
+				Usage:   "Set output format: properties (Java I2P), ini (i2pd), yaml (go-i2p)",
+				Value:   "yaml",
 			},
 			&cli.StringFlag{
-				Name:  "output, o",
-				Usage: "Specify output file path (auto-generated from input filename if not set)",
+				Name:    "output",
+				Aliases: []string{"o"},
+				Usage:   "Specify output file path (auto-generated from input filename if not set)",
 			},
 			&cli.BoolFlag{
 				Name:  "validate",

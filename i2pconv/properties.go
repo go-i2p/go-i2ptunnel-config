@@ -8,6 +8,9 @@ import (
 	"github.com/magiconair/properties"
 )
 
+// parseJavaProperties parses a Java I2P .properties / .config byte slice into
+// a TunnelConfig. All recognised tunnel.* and option.* property patterns are
+// handled; unknown keys are stored in the Tunnel options map.
 func (c *Converter) parseJavaProperties(input []byte) (*TunnelConfig, error) {
 	// Use LoadString which returns error instead of MustLoadString which panics
 	p, err := properties.LoadString(string(input))
