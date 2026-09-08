@@ -1,6 +1,6 @@
 module github.com/go-i2p/go-i2ptunnel-config
 
-go 1.26.0
+go 1.26.3
 
 require (
 	github.com/go-i2p/i2pkeys v0.33.92
@@ -11,10 +11,13 @@ require (
 
 require (
 	github.com/cpuguy83/go-md2man/v2 v2.0.7 // indirect
+	github.com/kr/pretty v0.3.1 // indirect
+	github.com/rogpeppe/go-internal v1.14.1 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/sirupsen/logrus v1.10.2 // indirect
 	github.com/xrash/smetrics v0.0.0-20250705151800-55b8f293f342 // indirect
 	golang.org/x/sys v0.48.0 // indirect
+	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
 )
 
 retract (
